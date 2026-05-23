@@ -40,16 +40,26 @@
  */
 static void parse_server_args(int argc, char *argv[], ServerConfig *config)
 {
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+    for (int i = 1; i < argc; i++)
+    {
+        if (strcmp(argv[i], "--port") == 0 && i + 1 < argc)
+        {
             config->port = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--table") == 0 && i + 1 < argc) {
+        }
+        else if (strcmp(argv[i], "--table") == 0 && i + 1 < argc)
+        {
             snprintf(config->table_name, MAX_TABLE_NAME_LEN, "%s", argv[++i]);
-        } else if (strcmp(argv[i], "--points") == 0 && i + 1 < argc) {
+        }
+        else if (strcmp(argv[i], "--points") == 0 && i + 1 < argc)
+        {
             config->starting_points = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--bots") == 0 && i + 1 < argc) {
+        }
+        else if (strcmp(argv[i], "--bots") == 0 && i + 1 < argc)
+        {
             config->bot_count = atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--log") == 0 && i + 1 < argc) {
+        }
+        else if (strcmp(argv[i], "--log") == 0 && i + 1 < argc)
+        {
             snprintf(config->log_path, MAX_LOG_PATH_LEN, "%s", argv[++i]);
         }
     }
@@ -70,9 +80,11 @@ static void collect_client_fds(const GameState *game, int fds[], int *num_client
 {
     *num_clients = 0;
 
-    for (int i = 0; i < MAX_PLAYERS; i++) {
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
         if (game->players[i].status != PLAYER_EMPTY &&
-            game->players[i].socket_fd >= 0) {
+            game->players[i].socket_fd >= 0)
+        {
             fds[*num_clients] = game->players[i].socket_fd;
             (*num_clients)++;
         }
@@ -89,9 +101,11 @@ static void collect_client_fds(const GameState *game, int fds[], int *num_client
  */
 static int find_seat_by_socket(const GameState *game, int socket_fd)
 {
-    for (int i = 0; i < MAX_PLAYERS; i++) {
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
         if (game->players[i].socket_fd == socket_fd &&
-            game->players[i].status != PLAYER_EMPTY) {
+            game->players[i].status != PLAYER_EMPTY)
+        {
             return i;
         }
     }
@@ -126,9 +140,11 @@ static void send_private_hands(GameState *game)
 {
     char hand_msg[MESSAGE_BUFFER_SIZE];
 
-    for (int i = 0; i < MAX_PLAYERS; i++) {
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
         if (game->players[i].status == PLAYER_ACTIVE &&
-            game->players[i].socket_fd >= 0) {
+            game->players[i].socket_fd >= 0)
+        {
             build_private_hand_message(game, i, hand_msg, sizeof(hand_msg));
             send_message(game->players[i].socket_fd, hand_msg);
         }
@@ -166,19 +182,23 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
      * LOGIN command:
      * Assigns the client to an empty seat and stores their name.
      */
-    if (strcmp(msg.command, "LOGIN") == 0) {
-        int seat = add_player(game, client_fd, msg.payload);
+    if (strcmp(msg.command, "LOGIN") == 0)
+    {
+        int seat = find_seat_by_socket(game, client_fd);
 
-        if (seat < 0) {
-            send_message(client_fd, "ERROR:-1:Seat unavailable\n");
+        if (seat < 0)
+        {
+            send_message(client_fd, "ERROR:-1:Player not connected\n");
             return;
         }
 
+        snprintf(game->players[seat].name, MAX_NAME_LEN, "%s", msg.payload);
+        game->players[seat].status = PLAYER_CONNECTED;
+
         char reply[MESSAGE_BUFFER_SIZE];
         snprintf(reply, sizeof(reply), "SEAT:%d:Welcome %s\n", seat, msg.payload);
-        send_message(client_fd, reply);
 
-        /* Let everyone know the table changed. */
+        send_message(client_fd, reply);
         send_public_state_to_all(game);
         return;
     }
@@ -187,7 +207,8 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
      * START command:
      * Starts a new hand, broadcasts public state, then sends private hands.
      */
-    if (strcmp(msg.command, "START") == 0) {
+    if (strcmp(msg.command, "START") == 0)
+    {
         start_new_hand(game);
         send_public_state_to_all(game);
         send_private_hands(game);
@@ -199,28 +220,38 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
      * Handles simple player actions. Current version supports CHECK, CALL,
      * and FOLD. More detailed legality checks should later go in poker_rules.c.
      */
-    if (strcmp(msg.command, "ACTN") == 0) {
+    if (strcmp(msg.command, "ACTN") == 0)
+    {
         int seat = find_seat_by_socket(game, client_fd);
 
-        if (seat < 0) {
+        if (seat < 0)
+        {
             send_message(client_fd, "ERROR:-1:Player not logged in\n");
             return;
         }
 
         /* Only the current-turn player may act. */
-        if (seat != game->current_turn) {
+        if (seat != game->current_turn)
+        {
             send_message(client_fd, "ERROR:-1:Not your turn\n");
             return;
         }
 
-        if (strcmp(msg.payload, "FOLD") == 0) {
+        if (strcmp(msg.payload, "FOLD") == 0)
+        {
             game->players[seat].status = PLAYER_FOLDED;
             send_message(client_fd, "OK:-1:Fold accepted\n");
-        } else if (strcmp(msg.payload, "CHECK") == 0) {
+        }
+        else if (strcmp(msg.payload, "CHECK") == 0)
+        {
             send_message(client_fd, "OK:-1:Check accepted\n");
-        } else if (strcmp(msg.payload, "CALL") == 0) {
+        }
+        else if (strcmp(msg.payload, "CALL") == 0)
+        {
             send_message(client_fd, "OK:-1:Call accepted\n");
-        } else {
+        }
+        else
+        {
             send_message(client_fd, "ERROR:-1:Illegal action\n");
             return;
         }
@@ -228,10 +259,12 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
         /* Simple turn advancement for now.
          * Later, the rules module should decide when a betting round ends.
          */
-        for (int i = 1; i <= MAX_PLAYERS; i++) {
+        for (int i = 1; i <= MAX_PLAYERS; i++)
+        {
             int next = (seat + i) % MAX_PLAYERS;
 
-            if (game->players[next].status == PLAYER_ACTIVE) {
+            if (game->players[next].status == PLAYER_ACTIVE)
+            {
                 game->current_turn = next;
                 break;
             }
@@ -248,16 +281,19 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
      * Current version only checks positive amount and available points.
      * Later, poker_rules.c should check minimum raise and betting-round rules.
      */
-    if (strcmp(msg.command, "RAISE") == 0) {
+    if (strcmp(msg.command, "RAISE") == 0)
+    {
         int seat = find_seat_by_socket(game, client_fd);
         int amount = atoi(msg.payload);
 
-        if (seat < 0) {
+        if (seat < 0)
+        {
             send_message(client_fd, "ERROR:-1:Player not logged in\n");
             return;
         }
 
-        if (amount <= 0 || amount > game->players[seat].points) {
+        if (amount <= 0 || amount > game->players[seat].points)
+        {
             send_message(client_fd, "ERROR:-1:Invalid raise amount\n");
             return;
         }
@@ -276,10 +312,12 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
      * QUIT command:
      * Removes the player from the table and closes their client socket.
      */
-    if (strcmp(msg.command, "QUIT") == 0) {
+    if (strcmp(msg.command, "QUIT") == 0)
+    {
         int seat = find_seat_by_socket(game, client_fd);
 
-        if (seat >= 0) {
+        if (seat >= 0)
+        {
             remove_player(game, seat);
         }
 
@@ -316,7 +354,8 @@ int main(int argc, char *argv[])
     /* Create the server listening socket. */
     int server_fd = init_server(config.port);
 
-    if (server_fd < 0) {
+    if (server_fd < 0)
+    {
         fprintf(stderr, "Failed to start server.\n");
         return 1;
     }
@@ -339,7 +378,8 @@ int main(int argc, char *argv[])
      *   - the listening socket, meaning a new client wants to connect
      *   - any connected client socket, meaning a client sent a message
      */
-    while (1) {
+    while (1)
+    {
         FD_ZERO(&read_fds);
 
         /* Always watch the main listening socket. */
@@ -347,13 +387,16 @@ int main(int argc, char *argv[])
         max_fd = server_fd;
 
         /* Watch all connected client sockets. */
-        for (int i = 0; i < MAX_PLAYERS; i++) {
+        for (int i = 0; i < MAX_PLAYERS; i++)
+        {
             int fd = game.players[i].socket_fd;
 
-            if (game.players[i].status != PLAYER_EMPTY && fd >= 0) {
+            if (game.players[i].status != PLAYER_EMPTY && fd >= 0)
+            {
                 FD_SET(fd, &read_fds);
 
-                if (fd > max_fd) {
+                if (fd > max_fd)
+                {
                     max_fd = fd;
                 }
             }
@@ -362,7 +405,8 @@ int main(int argc, char *argv[])
         /* Block until at least one socket becomes ready. */
         int ready = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
 
-        if (ready < 0) {
+        if (ready < 0)
+        {
             perror("select failed");
             break;
         }
@@ -370,23 +414,37 @@ int main(int argc, char *argv[])
         /*
          * If the listening socket is ready, accept a new client connection.
          */
-        if (FD_ISSET(server_fd, &read_fds)) {
+        if (FD_ISSET(server_fd, &read_fds))
+        {
             int client_fd = accept_client(server_fd);
 
-            if (client_fd >= 0) {
-                send_message(client_fd, "INFO:-1:Connected. Send LOGIN:-1:your_name\n");
+            if (client_fd >= 0)
+            {
+                int seat = add_player(&game, client_fd, "Guest");
+
+                if (seat < 0)
+                {
+                    send_message(client_fd, "ERROR:-1:Seat unavailable\n");
+                    close(client_fd);
+                }
+                else
+                {
+                    send_message(client_fd, "INFO:-1:Connected. Send LOGIN:-1:your_name\n");
+                }
             }
         }
 
         /*
          * Check each connected client to see if it sent data.
          */
-        for (int i = 0; i < MAX_PLAYERS; i++) {
+        for (int i = 0; i < MAX_PLAYERS; i++)
+        {
             int client_fd = game.players[i].socket_fd;
 
             if (game.players[i].status != PLAYER_EMPTY &&
                 client_fd >= 0 &&
-                FD_ISSET(client_fd, &read_fds)) {
+                FD_ISSET(client_fd, &read_fds))
+            {
                 char buffer[MESSAGE_BUFFER_SIZE];
                 memset(buffer, 0, sizeof(buffer));
 
@@ -396,12 +454,15 @@ int main(int argc, char *argv[])
                 /*
                  * bytes_read <= 0 means the client disconnected or an error happened.
                  */
-                if (bytes_read <= 0) {
+                if (bytes_read <= 0)
+                {
                     printf("Client disconnected.\n");
                     close(client_fd);
                     remove_player(&game, i);
                     send_public_state_to_all(&game);
-                } else {
+                }
+                else
+                {
                     handle_client_message(&game, client_fd, buffer);
                 }
             }
