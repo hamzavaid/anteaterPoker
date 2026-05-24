@@ -29,7 +29,7 @@
 #include "socket_server.h"
 #include "server_gui.h"
 
-//global variable for GTK
+// global variable for GTK
 static GameState g_game;
 
 /*
@@ -352,12 +352,12 @@ static gboolean on_client_readable(GIOChannel *channel, GIOCondition cond, gpoin
 {
     (void)cond;
     int client_fd = GPOINTER_TO_INT(data);
- 
+
     char buffer[MESSAGE_BUFFER_SIZE];
     memset(buffer, 0, sizeof(buffer));
- 
+
     ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
- 
+
     if (bytes_read <= 0)
     {
         // client disconnected — find their seat and remove them
@@ -368,15 +368,20 @@ static gboolean on_client_readable(GIOChannel *channel, GIOCondition cond, gpoin
         close(client_fd);
         send_public_state_to_all(&g_game);
         server_gui_refresh();
- 
-        g_io_channel_unref(channel);
+
         return FALSE; // stop watching this socket
     }
- 
+
     handle_client_message(&g_game, client_fd, buffer);
-    return TRUE; // keep watching
+
+    if (find_seat_by_socket(&g_game, client_fd) < 0)
+    {
+        return FALSE;
+    }
+
+    return TRUE;
 }
- 
+
 /*
  * on_server_readable
  *
@@ -387,24 +392,26 @@ static gboolean on_client_readable(GIOChannel *channel, GIOCondition cond, gpoin
  */
 static gboolean on_server_readable(GIOChannel *channel, GIOCondition cond, gpointer data)
 {
-    (void)channel; (void)cond; (void)data;
- 
+    (void)channel;
+    (void)cond;
+    (void)data;
+
     int client_fd = accept_client(g_game.server_fd);
- 
+
     if (client_fd < 0)
         return TRUE; // accept failed, keep listening
- 
+
     int seat = add_player(&g_game, client_fd, "Guest");
- 
+
     if (seat < 0)
     {
         send_message(client_fd, "ERROR:-1:Seat unavailable\n");
         close(client_fd);
         return TRUE;
     }
- 
+
     send_message(client_fd, "INFO:-1:Connected. Send LOGIN:-1:your_name\n");
- 
+
     // register this new client socket with GTK so on_client_readable
     // fires automatically whenever it sends data
     GIOChannel *client_channel = g_io_channel_unix_new(client_fd);
@@ -412,7 +419,7 @@ static gboolean on_server_readable(GIOChannel *channel, GIOCondition cond, gpoin
                    on_client_readable,
                    GINT_TO_POINTER(client_fd));
     g_io_channel_unref(client_channel);
- 
+
     server_gui_refresh();
     return TRUE; // keep watching the listening socket
 }
@@ -461,13 +468,13 @@ int main(int argc, char *argv[])
     GIOChannel *server_channel = g_io_channel_unix_new(server_fd);
     g_io_add_watch(server_channel, G_IO_IN, on_server_readable, NULL);
     g_io_channel_unref(server_channel);
- 
+
     // build and show the server GUI window
     // passes &g_game so the GUI can read state and call game functions
     launch_server_window(&g_game);
- 
+
     gtk_main();
- 
+
     close(server_fd);
     return 0;
 }

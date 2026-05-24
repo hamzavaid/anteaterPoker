@@ -165,7 +165,7 @@ static void card_to_asset_path(Card card, char *buf, int bufsize)
     char tmp[64];
     card_to_string(card, tmp, sizeof tmp);
     // card_to_string should produce something like "ace_of_spades"
-    snprintf(buf, bufsize, "assets/%s.png", tmp);
+    snprintf(buf, bufsize, "src/assets/%s.png", tmp);
 }
 
 //reads g_game and updates every widget on screen.
@@ -518,7 +518,7 @@ void launch_server_window(GameState *game)
     GtkWidget *overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(win), overlay);
  
-    GtkWidget *bg = gtk_image_new_from_file("assets/background.jpg");
+    GtkWidget *bg = gtk_image_new_from_file("src/assets/background.jpg");
     gtk_widget_set_size_request(bg, 1100, 700);
     gtk_container_add(GTK_CONTAINER(overlay), bg);
  

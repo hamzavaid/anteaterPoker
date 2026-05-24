@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include <gtk/gtk.h>
 
@@ -33,6 +34,41 @@
 #define DEFAULT_PORT 10010
 
 static ClientState g_client;
+
+static void build_card_asset_path(char *out, size_t out_size, const char *card_text)
+{
+    char filename[128];
+    size_t j = 0;
+
+    if (out == NULL || out_size == 0)
+    {
+        return;
+    }
+
+    if (card_text == NULL)
+    {
+        snprintf(out, out_size, "%s", "src/assets/back_of_card.png");
+        return;
+    }
+
+    for (size_t i = 0; card_text[i] != '\0' && j < sizeof(filename) - 1; i++)
+    {
+        unsigned char ch = (unsigned char)card_text[i];
+
+        if (ch == ' ')
+        {
+            filename[j++] = '_';
+        }
+        else
+        {
+            filename[j++] = (char)tolower(ch);
+        }
+    }
+
+    filename[j] = '\0';
+
+    snprintf(out, out_size, "src/assets/%s.png", filename);
+}
 
 /*
  * Converts a phase string from the server into a GamePhase enum.
@@ -209,18 +245,18 @@ static void parse_stat_message(ClientState *client, const char *message)
         message,
         "STAT:-1:phase=%63[^;];players=%d;pot=%d;turn=%d;community=%d",
         phase_text, &players, &pot, &turn, &community);
- 
+
     if (matched == 5)
     {
-        client->phase          = phase_from_string(phase_text);
-        client->player_count   = players;
-        client->pot            = pot;
-        client->current_turn   = turn;
+        client->phase = phase_from_string(phase_text);
+        client->player_count = players;
+        client->pot = pot;
+        client->current_turn = turn;
         client->community_count = community;
- 
+
         // update GUI pot
         poker_gui_set_pot(pot);
- 
+
         // update GUI status — show whose turn it is
         if (turn == client->seat)
             poker_gui_set_status("Your turn!");
@@ -230,7 +266,7 @@ static void parse_stat_message(ClientState *client, const char *message)
             snprintf(buf, sizeof buf, "Waiting for seat %d...", turn);
             poker_gui_set_status(buf);
         }
- 
+
         set_client_status(client, "Received public game state.");
     }
     else
@@ -284,21 +320,21 @@ static void parse_hand_message(ClientState *client, const char *message)
     /*
      * If parsing worked, update the client's ability and status.
      */
-     if (matched == 4)
+    if (matched == 4)
     {
-        client->seat    = seat;
+        client->seat = seat;
         client->ability = ability_from_string(ability_text);
- 
+
         // build asset paths and show cards in GUI
         char path1[128], path2[128];
-        snprintf(path1, sizeof path1, "assets/%s.png", card1_text);
-        snprintf(path2, sizeof path2, "assets/%s.png", card2_text);
+        build_card_asset_path(path1, sizeof path1, card1_text);
+        build_card_asset_path(path2, sizeof path2, card2_text);
         poker_gui_set_my_card(0, path1);
         poker_gui_set_my_card(1, path2);
- 
+
         // update stack display
         poker_gui_set_stack(client->pot);
- 
+
         set_client_status(client, "Received private hand.");
         poker_gui_set_status("Cards dealt. Good luck!");
     }
@@ -370,7 +406,8 @@ static void handle_single_server_message(ClientState *client, const char *messag
     else if (strncmp(message, "ERROR:", 6) == 0)
     {
         const char *payload = strchr(message + 6, ':');
-        if (payload) payload++;
+        if (payload)
+            payload++;
         poker_gui_set_status(payload ? payload : "Server error.");
         set_client_status(client, "Server returned an error.");
     }
@@ -435,23 +472,23 @@ static void handle_server_buffer(ClientState *client, const char *buffer)
  */
 static gboolean on_server_readable(GIOChannel *channel, GIOCondition cond, gpointer data)
 {
-    (void)cond; (void)data;
- 
+    (void)cond;
+    (void)data;
+
     char buffer[CLIENT_BUFFER_SIZE];
     memset(buffer, 0, sizeof buffer);
- 
+
     int bytes = receive_from_server(g_client.socket_fd, buffer, sizeof buffer);
- 
+
     if (bytes <= 0)
     {
         printf("Server disconnected.\n");
         poker_gui_set_status("Disconnected from server.");
         close(g_client.socket_fd);
         g_client.connected = 0;
-        g_io_channel_unref(channel);
         return FALSE; // stop watching
     }
- 
+
     handle_server_buffer(&g_client, buffer);
     return TRUE; // keep watching
 }
@@ -469,48 +506,48 @@ static gboolean on_server_readable(GIOChannel *channel, GIOCondition cond, gpoin
 int main(int argc, char *argv[])
 {
     gtk_init(&argc, &argv);
- 
+
     char host[128];
     char name[CLIENT_NAME_LEN];
-    int  port;
- 
+    int port;
+
     init_client_state(&g_client);
     parse_client_args(argc, argv, host, sizeof host, &port, name, sizeof name);
     set_client_name(&g_client, name);
- 
+
     printf("Connecting to %s:%d as %s...\n", host, port, name);
- 
+
     g_client.socket_fd = connect_to_server(host, port);
     if (g_client.socket_fd < 0)
     {
         fprintf(stderr, "Could not connect to server.\n");
         return 1;
     }
- 
+
     g_client.connected = 1;
- 
+
     // receive initial INFO message from server
     char buffer[CLIENT_BUFFER_SIZE];
     memset(buffer, 0, sizeof buffer);
     int bytes = receive_from_server(g_client.socket_fd, buffer, sizeof buffer);
     if (bytes > 0)
         handle_server_buffer(&g_client, buffer);
- 
+
     // send LOGIN
     char login_msg[CLIENT_BUFFER_SIZE];
     snprintf(login_msg, sizeof login_msg, "LOGIN:-1:%s\n", name);
     send_to_server(g_client.socket_fd, login_msg);
- 
+
     // register socket with GTK so on_server_readable fires on incoming data
     GIOChannel *channel = g_io_channel_unix_new(g_client.socket_fd);
     g_io_add_watch(channel, G_IO_IN, on_server_readable, NULL);
     g_io_channel_unref(channel);
- 
+
     // launch GUI — passes socket fd so button callbacks can send to server
     launch_poker_window(g_client.socket_fd);
- 
+
     gtk_main();
- 
+
     close(g_client.socket_fd);
     return 0;
 }

@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
 
 #include "poker_gui.h"
 #include "socket_client.h"
@@ -257,7 +259,7 @@ void poker_gui_update_slot(int slot, const char* name, const char* bet_str, int 
 
 static GtkWidget* make_card_back_sm(void)
 {
-    GtkWidget* img = gtk_image_new_from_file("assets/back_of_card.png");
+    GtkWidget* img = gtk_image_new_from_file("src/assets/back_of_card.png");
     gtk_widget_set_size_request(img, CARD_W_SM, CARD_H_SM);
     return img;
 }
@@ -281,7 +283,7 @@ static GtkWidget* make_card_placeholder_lg(void)
    suit:  "spades","hearts","diamonds","clubs" */
 void get_card_path(char* buf, int bufsize, const char* value, const char* suit)
 {
-    snprintf(buf, bufsize, "assets/%s_of_%s.png", value, suit);
+    snprintf(buf, bufsize, "src/assets/%s_of_%s.png", value, suit);
 }
 
 static void on_call(GtkButton* b, gpointer d)
@@ -318,7 +320,17 @@ static void on_fold(GtkButton* b, gpointer d)
 
 static void on_quit(GtkButton* b, gpointer d)
 {
-    (void)b; (void)d;
+    (void)b;
+    (void)d;
+
+    if (g_server_fd >= 0)
+    {
+        send_to_server(g_server_fd, "QUIT:-1:bye\n");
+        shutdown(g_server_fd, SHUT_RDWR);
+        close(g_server_fd);
+        g_server_fd = -1;
+    }
+
     gtk_main_quit();
 }
 
@@ -473,7 +485,7 @@ static GtkWidget* build_left_panel(void)
 
     GtkWidget* frame = gtk_frame_new(NULL);
     gtk_widget_set_name(frame, "rankings_frame");
-    GtkWidget* img = gtk_image_new_from_file("assets/rankings.jpg");
+    GtkWidget* img = gtk_image_new_from_file("src/assets/rankings.jpg");
     gtk_widget_set_size_request(img, 268, -1);
     gtk_container_add(GTK_CONTAINER(frame), img);
     gtk_box_pack_start(GTK_BOX(vbox), frame, FALSE, FALSE, 0);
@@ -601,7 +613,7 @@ void launch_poker_window(int server_fd)
     GtkWidget *overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(win), overlay);
 
-    GtkWidget *bg = gtk_image_new_from_file("assets/background.jpg");
+    GtkWidget *bg = gtk_image_new_from_file("src/assets/background.jpg");
     gtk_widget_set_size_request(bg, 1100, 680);
     gtk_container_add(GTK_CONTAINER(overlay), bg);
 
