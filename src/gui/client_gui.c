@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//add #include for other needed files
+
+#include "poker_gui.h"
+#include "socket_client.h"
 
 #define MAX_PLAYERS     6   // 1 local + up to 5 opponents
 #define MAX_COMM_CARDS  5
