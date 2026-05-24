@@ -221,20 +221,28 @@ void poker_gui_set_community_card(int idx, const char* path)
 {
     if (idx < 0 || idx >= MAX_COMM_CARDS) return;
     if (!g_comm_card_img[idx]) return;
-    if (path)
-        gtk_image_set_from_file(GTK_IMAGE(g_comm_card_img[idx]), path);
-    else
+    if (path) {
+        GdkPixbuf *pb = gdk_pixbuf_new_from_file_at_scale(
+            path, CARD_W_MD, CARD_H_MD, FALSE, NULL);
+        gtk_image_set_from_pixbuf(GTK_IMAGE(g_comm_card_img[idx]), pb);
+        if (pb) g_object_unref(pb);
+    } else {
         gtk_image_clear(GTK_IMAGE(g_comm_card_img[idx]));
+    }
 }
 
 void poker_gui_set_my_card(int idx, const char* path)
 {
     if (idx < 0 || idx >= 2) return;
     if (!g_my_card_img[idx]) return;
-    if (path)
-        gtk_image_set_from_file(GTK_IMAGE(g_my_card_img[idx]), path);
-    else
+    if (path) {
+        GdkPixbuf *pb = gdk_pixbuf_new_from_file_at_scale(
+            path, CARD_W_LG, CARD_H_LG, FALSE, NULL);
+        gtk_image_set_from_pixbuf(GTK_IMAGE(g_my_card_img[idx]), pb);
+        if (pb) g_object_unref(pb);
+    } else {
         gtk_image_clear(GTK_IMAGE(g_my_card_img[idx]));
+    }
 }
 
 //Update opponent slot display (name, bet, active, folded status)
@@ -259,7 +267,10 @@ void poker_gui_update_slot(int slot, const char* name, const char* bet_str, int 
 
 static GtkWidget* make_card_back_sm(void)
 {
-    GtkWidget* img = gtk_image_new_from_file("src/assets/back_of_card.png");
+    GdkPixbuf *pb = gdk_pixbuf_new_from_file_at_scale(
+        "assets/back_of_card.png", CARD_W_SM, CARD_H_SM, FALSE, NULL);
+    GtkWidget *img = gtk_image_new_from_pixbuf(pb);
+    if (pb) g_object_unref(pb);
     gtk_widget_set_size_request(img, CARD_W_SM, CARD_H_SM);
     return img;
 }
@@ -485,11 +496,14 @@ static GtkWidget* build_left_panel(void)
 
     GtkWidget* frame = gtk_frame_new(NULL);
     gtk_widget_set_name(frame, "rankings_frame");
-    GtkWidget* img = gtk_image_new_from_file("src/assets/rankings.jpg");
+    GdkPixbuf *rpb = gdk_pixbuf_new_from_file_at_scale("assets/rankings.jpg", 268, -1, TRUE, NULL);
+    GtkWidget* img = gtk_image_new_from_pixbuf(rpb);
+    if (rpb) g_object_unref(rpb);
     gtk_widget_set_size_request(img, 268, -1);
+ 
     gtk_container_add(GTK_CONTAINER(frame), img);
     gtk_box_pack_start(GTK_BOX(vbox), frame, FALSE, FALSE, 0);
-
+ 
     return vbox;
 }
 
@@ -613,7 +627,9 @@ void launch_poker_window(int server_fd)
     GtkWidget *overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(win), overlay);
 
-    GtkWidget *bg = gtk_image_new_from_file("src/assets/background.jpg");
+    GdkPixbuf *bg_pb = gdk_pixbuf_new_from_file_at_scale("assets/background.jpg", 1100, 680, FALSE, NULL);
+    GtkWidget *bg = gtk_image_new_from_pixbuf(bg_pb);
+    if (bg_pb) g_object_unref(bg_pb);
     gtk_widget_set_size_request(bg, 1100, 680);
     gtk_container_add(GTK_CONTAINER(overlay), bg);
 
