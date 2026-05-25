@@ -49,7 +49,7 @@ TEST_SERVER_CLIENT_BIN = $(BIN_DIR)/test_server_client
 
 # Archive names required by alpha rubric
 USER_ARCHIVE = Poker_Alpha.tar.gz
-SRC_ARCHIVE = Poker_Alpha.src.tar.gz
+SRC_ARCHIVE = Poker_Alpha_src.tar.gz
 
 # Shared rule objects
 RULES_OBJ = \
@@ -174,35 +174,35 @@ tar: source-tar user-tar
 
 # Source-code package.
 source-tar: check-docs
-	rm -rf $(DIST_DIR)/poker
-	mkdir -p $(DIST_DIR)/poker
-	mkdir -p $(DIST_DIR)/poker/bin
-	cp README.md INSTALL.md COPYRIGHT.md Makefile $(DIST_DIR)/poker/
-	cp -R include src test doc $(DIST_DIR)/poker/
-	tar -czf $(SRC_ARCHIVE) -C $(DIST_DIR) poker
-	rm -rf $(DIST_DIR)/poker
+	rm -rf $(DIST_DIR)/Poker_Alpha_src
+	mkdir -p $(DIST_DIR)/Poker_Alpha_src
+	mkdir -p $(DIST_DIR)/Poker_Alpha_src/bin
+	cp README.md INSTALL.md COPYRIGHT.md Makefile $(DIST_DIR)/Poker_Alpha_src/
+	cp -R include src test doc $(DIST_DIR)/Poker_Alpha_src/
+	tar -czf $(SRC_ARCHIVE) -C $(DIST_DIR) Poker_Alpha_src
+	rm -rf $(DIST_DIR)/Poker_Alpha_src
 	@echo "Created $(SRC_ARCHIVE)"
 
 # User/customer binary package.
 user-tar: all check-docs
-	rm -rf $(DIST_DIR)/poker
-	mkdir -p $(DIST_DIR)/poker/bin
-	mkdir -p $(DIST_DIR)/poker/doc
-	cp README.md $(DIST_DIR)/poker/README.md
-	cp INSTALL.md $(DIST_DIR)/poker/INSTALL.md
-	cp COPYRIGHT.md $(DIST_DIR)/poker/COPYRIGHT.md
-	cp $(SERVER_BIN) $(DIST_DIR)/poker/bin/poker_server
-	cp $(CLIENT_BIN) $(DIST_DIR)/poker/bin/poker_client
-	cp doc/Poker_UserManual.pdf $(DIST_DIR)/poker/doc/Poker_UserManual.pdf
+	rm -rf $(DIST_DIR)/Poker_Alpha
+	mkdir -p $(DIST_DIR)/Poker_Alpha/bin
+	mkdir -p $(DIST_DIR)/Poker_Alpha/doc
+	cp README.md $(DIST_DIR)/Poker_Alpha/README.md
+	cp INSTALL.md $(DIST_DIR)/Poker_Alpha/INSTALL.md
+	cp COPYRIGHT.md $(DIST_DIR)/Poker_Alpha/COPYRIGHT.md
+	cp $(SERVER_BIN) $(DIST_DIR)/Poker_Alpha/bin/poker_server
+	cp $(CLIENT_BIN) $(DIST_DIR)/Poker_Alpha/bin/poker_client
+	cp doc/Poker_UserManual.pdf $(DIST_DIR)/Poker_Alpha/doc/Poker_UserManual.pdf
 
 	# Copy assets if your GUI loads images from src/assets.
 	if [ -d src/assets ]; then \
-		mkdir -p $(DIST_DIR)/poker/src; \
-		cp -R src/assets $(DIST_DIR)/poker/src/assets; \
+		mkdir -p $(DIST_DIR)/Poker_Alpha/src; \
+		cp -R src/assets $(DIST_DIR)/Poker_Alpha/src/assets; \
 	fi
 
-	tar -czf $(USER_ARCHIVE) -C $(DIST_DIR) poker
-	rm -rf $(DIST_DIR)/poker
+	tar -czf $(USER_ARCHIVE) -C $(DIST_DIR) Poker_Alpha
+	rm -rf $(DIST_DIR)/Poker_Alpha
 	@echo "Created $(USER_ARCHIVE)"
 
 clean:
