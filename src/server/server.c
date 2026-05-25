@@ -11,10 +11,8 @@
  *   - Update GameState by calling game-state helper functions.
  *   - Send public table updates and private hand messages.
  *
- * This is currently a starter server. It supports basic login, hand start,
- * simple actions, raises, disconnects, and public/private messages.
- * Full poker rules and Anteater abilities should later be moved into
- * poker_rules.c and anteater_abilities.c.
+ * The alpha server supports login, hand start, simple actions, raises,
+ * disconnects, and public/private messages.
  */
 
 #include <stdio.h>
@@ -39,8 +37,8 @@ static GameState g_game;
  * Reads command-line arguments and updates the ServerConfig.
  *
  * Supported examples:
- *   ./bin/server --port 10010 --table "ZotHouse"
- *   ./bin/server --points 1000 --bots 1 --log logs/game.log
+ *   ./bin/poker_server --port 10010 --table "ZotHouse"
+ *   ./bin/poker_server --points 1000 --bots 1 --log logs/game.log
  *
  * This function is static because it is only used inside server.c.
  */
@@ -198,7 +196,8 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
             return;
         }
 
-        snprintf(game->players[seat].name, MAX_NAME_LEN, "%s", msg.payload);
+        snprintf(game->players[seat].name, MAX_NAME_LEN, "%.*s",
+                 MAX_NAME_LEN - 1, msg.payload);
         game->players[seat].status = PLAYER_CONNECTED;
 
         char reply[MESSAGE_BUFFER_SIZE];
@@ -226,7 +225,7 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
     /*
      * ACTN command:
      * Handles simple player actions. Current version supports CHECK, CALL,
-     * and FOLD. More detailed legality checks should later go in poker_rules.c.
+     * and FOLD. Shared legality helpers live in poker_rules.c.
      */
     if (strcmp(msg.command, "ACTN") == 0)
     {
@@ -351,6 +350,7 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
  */
 static gboolean on_client_readable(GIOChannel *channel, GIOCondition cond, gpointer data)
 {
+    (void)channel;
     (void)cond;
     int client_fd = GPOINTER_TO_INT(data);
 
@@ -440,7 +440,12 @@ static gboolean on_server_readable(GIOChannel *channel, GIOCondition cond, gpoin
  */
 int main(int argc, char *argv[])
 {
-    gtk_init(&argc, &argv);
+    if (!gtk_init_check(&argc, &argv))
+    {
+        fprintf(stderr, "Failed to initialize GTK. Check DISPLAY/WSLg or run from a graphical session.\n");
+        return 1;
+    }
+
     ServerConfig config;
 
     /* Load default options first, then override with command-line values. */

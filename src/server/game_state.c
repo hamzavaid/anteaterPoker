@@ -80,7 +80,7 @@ void init_game_state(GameState *game, const ServerConfig *config, int server_fd)
     /* -1 means no current player turn is assigned yet. */
     game->current_turn = -1;
 
-    /* Dealer seat starts at 0 for now. This can rotate later. */
+    /* Dealer seat starts at 0 in the alpha build. */
     game->dealer_seat = 0;
 
     /* No bets or community cards exist at startup. */
@@ -263,9 +263,7 @@ void start_new_hand(GameState *game)
     /* Deal two normal private cards and assign ability cards. */
     deal_private_cards(game);
 
-    /* Assign the first active player as current turn.
-     * More advanced logic can later start after blinds/dealer.
-     */
+    /* Assign the first active player as current turn for the alpha build. */
     for (int i = 0; i < MAX_PLAYERS; i++) {
         if (game->players[i].status == PLAYER_ACTIVE) {
             game->current_turn = i;
@@ -281,8 +279,8 @@ void start_new_hand(GameState *game)
  * Also assigns one temporary Anteater ability card.
  *
  * NOTE:
- *   The ability assignment here is a placeholder. Later, this should be
- *   replaced by a real Anteater ability deck or random ability distribution.
+ *   The alpha build assigns abilities deterministically by seat so testers can
+ *   see each ability type without relying on randomness.
  */
 void deal_private_cards(GameState *game)
 {
@@ -296,9 +294,7 @@ void deal_private_cards(GameState *game)
             game->players[i].hand[0] = deal_card(&game->deck);
             game->players[i].hand[1] = deal_card(&game->deck);
 
-            /* Temporary ability assignment:
-             * Seats cycle through ability values 1-5.
-             */
+            /* Seats cycle through ability values 1-5. */
             game->players[i].ability.type = (AbilityType)((i % 5) + 1);
             game->players[i].ability.used = 0;
             game->players[i].ability.owner_seat = i;

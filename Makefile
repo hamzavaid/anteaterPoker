@@ -1,13 +1,27 @@
 # Makefile for Anteater Poker
+#
+# Required rubric commands:
+#   make
+#   make clean
+#   make test
+#   make test-gui
+#   make tar
+#
+# Main executables:
+#   bin/poker_server
+#   bin/poker_client
+#
+# Legacy symlinks:
+#   bin/server -> poker_server
+#   bin/poker  -> poker_client
 
 CC = gcc
 
-# GTK settings for Ubuntu Linux.
-# Needed because server.c / GUI files use #include <gtk/gtk.h>
-GTK_CFLAGS = $(shell pkg-config --cflags gtk+-3.0)
-GTK_LIBS = $(shell pkg-config --libs gtk+-3.0)
+# GTK settings for Ubuntu/Linux.
+GTK_CFLAGS := $(shell pkg-config --cflags gtk+-3.0)
+GTK_LIBS := $(shell pkg-config --libs gtk+-3.0)
 
-CFLAGS = -Wall -Wextra -std=c11 -Iinclude $(GTK_CFLAGS)
+CFLAGS = -Wall -Wextra -std=c11 -g -Iinclude $(GTK_CFLAGS)
 LDFLAGS = $(GTK_LIBS)
 
 # Directories
@@ -19,35 +33,48 @@ GUI_DIR = $(SRC_DIR)/gui
 TEST_DIR = test
 BIN_DIR = bin
 BUILD_DIR = build
+DIST_DIR = dist
 
-# Output programs
-SERVER_BIN = $(BIN_DIR)/server
-CLIENT_BIN = $(BIN_DIR)/poker
+# Output programs required by alpha rubric
+SERVER_BIN = $(BIN_DIR)/poker_server
+CLIENT_BIN = $(BIN_DIR)/poker_client
+
+# Optional legacy names
+LEGACY_SERVER_BIN = $(BIN_DIR)/server
+LEGACY_CLIENT_BIN = $(BIN_DIR)/poker
+
+# Test binaries
 TEST_DECK_BIN = $(BIN_DIR)/test_deck
 TEST_SERVER_CLIENT_BIN = $(BIN_DIR)/test_server_client
 
-# Shared rules source files
+# Archive names required by alpha rubric
+USER_ARCHIVE = Poker_Alpha.tar.gz
+SRC_ARCHIVE = Poker_Alpha.src.tar.gz
+
+# Shared rule objects
 RULES_OBJ = \
 	$(BUILD_DIR)/cards.o \
-	$(BUILD_DIR)/deck.o
+	$(BUILD_DIR)/deck.o \
+	$(BUILD_DIR)/poker_rules.o
 
-# Server source files
+# Server objects
 SERVER_OBJ = \
 	$(BUILD_DIR)/server.o \
 	$(BUILD_DIR)/game_state.o \
 	$(BUILD_DIR)/socket_server.o \
 	$(BUILD_DIR)/server_gui.o
 
-# Client source files
+# Client objects
 CLIENT_OBJ = \
 	$(BUILD_DIR)/poker.o \
 	$(BUILD_DIR)/client_state.o \
 	$(BUILD_DIR)/socket_client.o \
 	$(BUILD_DIR)/client_gui.o
 
-.PHONY: all server client test clean directories
+.PHONY: all server client test test-gui clean directories tar source-tar user-tar legacy-links check-docs
 
-all: directories $(SERVER_BIN) $(CLIENT_BIN) $(TEST_DECK_BIN) $(TEST_SERVER_CLIENT_BIN)
+# Build everything required.
+all: directories $(SERVER_BIN) $(CLIENT_BIN) $(TEST_DECK_BIN) $(TEST_SERVER_CLIENT_BIN) legacy-links
 
 directories:
 	mkdir -p $(BIN_DIR)
@@ -81,30 +108,106 @@ $(SERVER_BIN): $(SERVER_OBJ) $(RULES_OBJ) | directories
 $(CLIENT_BIN): $(CLIENT_OBJ) $(RULES_OBJ) $(BUILD_DIR)/game_state.o | directories
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-# Build deck test.
+# Build deck unit test.
 $(TEST_DECK_BIN): $(TEST_DIR)/test_deck.c $(RULES_OBJ) | directories
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-# Build server-client test.
+# Build server-client communication test.
 $(TEST_SERVER_CLIENT_BIN): $(TEST_DIR)/test_server_client.c | directories
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
+# Legacy executable names.
+legacy-links: $(SERVER_BIN) $(CLIENT_BIN)
+	ln -sf poker_server $(LEGACY_SERVER_BIN)
+	ln -sf poker_client $(LEGACY_CLIENT_BIN)
+
+# Required by rubric: make test should succeed cleanly.
+# This should not require manually opening a GUI.
 test: all
 	./$(TEST_DECK_BIN)
 	@echo ""
-	@echo "Deck test finished."
+	@echo "Deck unit test finished."
 	@echo ""
-	@echo "To test the server manually:"
-	@echo "  Terminal 1: ./bin/server --port 10010 --table \"ZotHouse\""
+	@echo "Server-client test binary was built:"
+	@test -x $(TEST_SERVER_CLIENT_BIN)
+	@echo "  $(TEST_SERVER_CLIENT_BIN)"
+	@echo ""
+	@echo "Manual communication test:"
+	@echo "  Terminal 1: ./bin/poker_server --port 10010 --table \"ZotHouse\""
 	@echo "  Terminal 2: ./bin/test_server_client"
 	@echo ""
-	@echo "To test the terminal client manually:"
-	@echo "  Terminal 1: ./bin/server --port 10010 --table \"ZotHouse\""
-	@echo "  Terminal 2: ./bin/poker --host localhost --port 10010 --name Hamza"
+	@echo "Manual client GUI test:"
+	@echo "  Terminal 1: ./bin/poker_server --port 10010 --table \"ZotHouse\""
+	@echo "  Terminal 2: ./bin/poker_client --host localhost --port 10010 --name Hamza"
+
+# Required by rubric: make test-gui should exist.
+test-gui: all
+	@test -x $(SERVER_BIN)
+	@test -x $(CLIENT_BIN)
+	@echo "GUI binaries built successfully."
+	@echo ""
+	@echo "Run this server GUI test:"
+	@echo "  ./bin/poker_server --port 10010 --table \"ZotHouse\""
+	@echo ""
+	@echo "Then run this client GUI test in another terminal:"
+	@echo "  ./bin/poker_client --host localhost --port 10010 --name Player"
+
+# Check required documentation before packaging.
+check-docs:
+	@test -f README.md || (echo "Missing README"; exit 1)
+	@test -f INSTALL.md || (echo "Missing INSTALL"; exit 1)
+	@test -f COPYRIGHT.md || (echo "Missing COPYRIGHT"; exit 1)
+	@test -f doc/Poker_UserManual.pdf || (echo "Missing doc/Poker_UserManual.pdf"; exit 1)
+	@test -f doc/Poker_SoftwareSpec.pdf || (echo "Missing doc/Poker_SoftwareSpec.pdf"; exit 1)
+
+# Required by rubric: make tar creates packages.
+tar: source-tar user-tar
+	@echo ""
+	@echo "Created:"
+	@echo "  $(USER_ARCHIVE)"
+	@echo "  $(SRC_ARCHIVE)"
+
+# Source-code package.
+source-tar: check-docs
+	rm -rf $(DIST_DIR)/poker
+	mkdir -p $(DIST_DIR)/poker
+	mkdir -p $(DIST_DIR)/poker/bin
+	cp README.md INSTALL.md COPYRIGHT.md Makefile $(DIST_DIR)/poker/
+	cp -R include src test doc $(DIST_DIR)/poker/
+	tar -czf $(SRC_ARCHIVE) -C $(DIST_DIR) poker
+	rm -rf $(DIST_DIR)/poker
+	@echo "Created $(SRC_ARCHIVE)"
+
+# User/customer binary package.
+user-tar: all check-docs
+	rm -rf $(DIST_DIR)/poker
+	mkdir -p $(DIST_DIR)/poker/bin
+	mkdir -p $(DIST_DIR)/poker/doc
+	cp README.md $(DIST_DIR)/poker/README.md
+	cp INSTALL.md $(DIST_DIR)/poker/INSTALL.md
+	cp COPYRIGHT.md $(DIST_DIR)/poker/COPYRIGHT.md
+	cp $(SERVER_BIN) $(DIST_DIR)/poker/bin/poker_server
+	cp $(CLIENT_BIN) $(DIST_DIR)/poker/bin/poker_client
+	cp doc/Poker_UserManual.pdf $(DIST_DIR)/poker/doc/Poker_UserManual.pdf
+
+	# Copy assets if your GUI loads images from src/assets.
+	if [ -d src/assets ]; then \
+		mkdir -p $(DIST_DIR)/poker/src; \
+		cp -R src/assets $(DIST_DIR)/poker/src/assets; \
+	fi
+
+	tar -czf $(USER_ARCHIVE) -C $(DIST_DIR) poker
+	rm -rf $(DIST_DIR)/poker
+	@echo "Created $(USER_ARCHIVE)"
 
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -rf $(DIST_DIR)
 	rm -f $(SERVER_BIN)
 	rm -f $(CLIENT_BIN)
+	rm -f $(LEGACY_SERVER_BIN)
+	rm -f $(LEGACY_CLIENT_BIN)
 	rm -f $(TEST_DECK_BIN)
 	rm -f $(TEST_SERVER_CLIENT_BIN)
+	rm -f $(USER_ARCHIVE)
+	rm -f $(SRC_ARCHIVE)

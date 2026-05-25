@@ -1,126 +1,77 @@
-# Installation Guide
-
-This document explains how to install, build, run, and uninstall Anteater Poker.
+# Anteater Poker Installation
 
 ## System Requirements
 
-Recommended system requirements:
+- EECS Linux host or compatible Unix-like environment
+- GCC
+- `make`
+- GTK 3 development libraries
+- `tar` or `gtar`
 
-- **Operating System:** Linux, macOS, or Windows with a compatible terminal environment
-- **Compiler:** GCC for C language
-- **Build Tools:** `make`
-- **Archive Tool:** `gtar` or `tar`
-- **GUI Library:** GTK 3
-- **Memory:** At least 512 MB recommended
-- **Storage:** At least 50 MB available space
-- **Network:** TCP/IP connection between server and clients
+## User Package
 
-The project is expected to be built and tested on the EECS course Linux servers.
+Unpack the user package:
 
-## Installing the Release Package
+```sh
+gtar xvzf Poker_Alpha.tar.gz
+cd poker
+```
 
-The release package contains the compiled program files. No compilation is required for this package.
+Run the server:
 
-Unpack the release archive:
+```sh
+./bin/poker_server --port 10010 --table "ZotHouse"
+```
 
-    gtar xvzf Poker_V1.0.tar.gz
+Run a client:
 
-This should create a directory named:
+```sh
+./bin/poker_client --host server_name_or_ip --port 10010 --name Player
+```
 
-    poker/
+Replace server_name_or_ip with the actual host name or IP address of the server, for example `localhost`.
 
-Open the user manual:
+## Source Package
 
-    evince poker/doc/Poker_UserManual.pdf
+Unpack and build from source:
 
-## Installing From Source
+```sh
+gtar xvzf Poker_Alpha.src.tar.gz
+cd poker
+make
+```
 
-The source package contains the project source code and must be compiled before running.
+Run tests:
 
-Unpack the source archive:
+```sh
+make test
+make test-gui
+```
 
-    gtar xvzf Poker_V1.0_src.tar.gz
+Create submission archives:
 
-Go into the project directory:
-
-    cd poker
-
-Compile the program:
-
-    make
-
-Run unit and system tests:
-
-    make test
+```sh
+make tar
+```
 
 Clean generated files:
 
-    make clean
+```sh
+make clean
+```
 
-## Running the Server
+Uninstall by deleting the unpacked `poker` directory.
 
-The server acts as the dealer and controls the game state. It shuffles the deck, deals cards, tracks points, validates player actions, and broadcasts updates.
+## More Information
 
-Example server command:
+User documentation is provided in:
 
-    ./bin/server --port 10010 --table "ZotHouse"
+```text
+doc/Poker_UserManual.pdf
+```
 
-## Running the Client
+Developer and design documentation is provided in:
 
-Each player runs a client program to connect to the server.
-
-Example client command:
-
-    ./bin/poker --host server_name_or_ip --port 10010
-
-After connecting, the player enters a display name, chooses an open seat, and waits for the game to begin.
-
-Replace `server_name_or_ip` with the actual host name or IP address of the server.
-
-## Troubleshooting
-
-### Cannot connect to server
-
-Check that:
-
-- The server is running.
-- The host name or IP address is correct.
-- The port number matches the server port.
-- The firewall or network is not blocking the connection.
-
-### Port already in use
-
-Choose a different port number:
-
-    ./bin/server --port 10011 --table "ZotHouse"
-
-Then clients must connect using the same port:
-
-    ./bin/poker --host server_name_or_ip --port 10011
-
-### Build fails
-
-Check that GCC, make, GTK 3, and the required development libraries are installed.
-
-Try cleaning and rebuilding:
-
-    make clean
-    make
-
-### GUI does not open
-
-Check that the graphical environment and GTK 3 libraries are available.
-
-## Uninstalling
-
-To uninstall Anteater Poker, delete the project directory:
-
-    rm -rf poker
-
-If you only want to remove compiled files while keeping the source code, run:
-
-    make clean
-
-## Notes
-
-Anteater Poker is intended for educational use only. The game uses points only and must not be used for gambling or real-money betting.
+```text
+doc/Poker_SoftwareSpec.pdf
+```

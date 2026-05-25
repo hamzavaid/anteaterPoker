@@ -312,8 +312,7 @@ static void parse_stat_message(ClientState *client, const char *message)
  * Expected format:
  * HAND:0:Jack of Diamonds,Ace of Clubs,ability=SNIFF
  *
- * This starter parser stores the ability.
- * It prints the cards, but does not fully convert card strings back into Card structs yet.
+ * Stores the ability and updates the GUI card images.
  */
 static void parse_hand_message(ClientState *client, const char *message)
 {
@@ -503,6 +502,7 @@ static void handle_server_buffer(ClientState *client, const char *buffer)
  */
 static gboolean on_server_readable(GIOChannel *channel, GIOCondition cond, gpointer data)
 {
+    (void)channel;
     (void)cond;
     (void)data;
 
@@ -536,7 +536,11 @@ static gboolean on_server_readable(GIOChannel *channel, GIOCondition cond, gpoin
  */
 int main(int argc, char *argv[])
 {
-    gtk_init(&argc, &argv);
+    if (!gtk_init_check(&argc, &argv))
+    {
+        fprintf(stderr, "Failed to initialize GTK. Check DISPLAY/WSLg or run from a graphical session.\n");
+        return 1;
+    }
 
     char host[128];
     char name[CLIENT_NAME_LEN];

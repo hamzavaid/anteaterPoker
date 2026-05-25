@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include "cards.h"
 
 Card create_card(Rank rank, Suit suit)

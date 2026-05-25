@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 /*
  * socket_client.c
  *
@@ -9,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <netdb.h>
 #include <netinet/in.h>
@@ -109,7 +112,10 @@ int connect_to_server(const char *host, int port)
         /* Connection failed. Check if we should retry. */
         if (attempt < max_retries - 1) {
             printf("Connection refused. Retrying in %d ms...\n", retry_delay_ms);
-            usleep(retry_delay_ms * 1000); /* Convert ms to microseconds. */
+            struct timespec delay;
+            delay.tv_sec = retry_delay_ms / 1000;
+            delay.tv_nsec = (retry_delay_ms % 1000) * 1000000L;
+            nanosleep(&delay, NULL);
         }
     }
 
