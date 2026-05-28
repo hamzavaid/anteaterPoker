@@ -56,9 +56,10 @@ SRC_ARCHIVE = Poker_Alpha_src.tar.gz
 
 # Shared rule objects
 RULES_OBJ = \
-    $(BUILD_DIR)/cards.o \
-    $(BUILD_DIR)/deck.o \
-    $(BUILD_DIR)/poker_rules.o
+	$(BUILD_DIR)/cards.o \
+	$(BUILD_DIR)/deck.o \
+	$(BUILD_DIR)/anteater_abilities.o \
+	$(BUILD_DIR)/poker_rules.o
 
 # Server objects
 SERVER_OBJ = \

@@ -252,7 +252,6 @@ void server_gui_refresh(void)
             }
     }
 
-    send_public_state_to_all(g_game);
 }
 
 static void on_start_hand(GtkButton *b, gpointer d)
@@ -260,6 +259,8 @@ static void on_start_hand(GtkButton *b, gpointer d)
     (void)b; (void)d;
     if (!g_game) return;
     start_new_hand(g_game);
+    send_public_state_to_all(g_game);
+    send_private_hands_to_all(g_game);
     server_gui_refresh();
 }
  
@@ -268,6 +269,7 @@ static void on_deal_flop(GtkButton *b, gpointer d)
     (void)b; (void)d;
     if (!g_game) return;
     deal_flop(g_game);
+    send_public_state_to_all(g_game);
     server_gui_refresh();
 }
  
@@ -276,6 +278,7 @@ static void on_deal_turn(GtkButton *b, gpointer d)
     (void)b; (void)d;
     if (!g_game) return;
     deal_turn(g_game);
+    send_public_state_to_all(g_game);
     server_gui_refresh();
 }
  
@@ -284,6 +287,7 @@ static void on_deal_river(GtkButton *b, gpointer d)
     (void)b; (void)d;
     if (!g_game) return;
     deal_river(g_game);
+    send_public_state_to_all(g_game);
     server_gui_refresh();
 }
  

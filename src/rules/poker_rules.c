@@ -4,91 +4,265 @@
 #include "poker_rules.h"
 #include "game_state.h"
 #include "cards.h"
+#include "deck.h"
+
+/*
+ * poker_rules.c is the authoritative rules engine for a hand.
+ * The server asks this file whether an action is legal, applies chip movement,
+ * advances betting rounds, deals community cards, and resolves showdown.
+ */
+
+static int active_player_has_chips(const Player *player)
+{
+    return player->status == PLAYER_ACTIVE && player->points > 0;
+}
+
+static void reset_round_bets(GameState *game)
+{
+    /* Each street has its own current bet. The pot keeps the chips. */
+    game->current_bet = 0;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        game->players[i].current_bet = 0;
+        game->acted_this_round[i] = 0;
+    }
+}
 
 int poker_action_is_legal(const GameState *game, int seat, const char *action, int raise_amount)
 {
-    // Check if the game state and action are valid, and if it's the player's turn.
-    if (game == NULL || action == NULL)
-    {
+    if (game == NULL || action == NULL) {
         return 0;
     }
-
-    // Check if the seat number is valid and corresponds to an active player.
-    if (seat < 0 || seat >= game->player_count)
-    {
+    if (seat < 0 || seat >= MAX_PLAYERS) {
         return 0;
     }
-
-    // Check if it's the player's turn.
-    if (game->current_turn != seat)
-    {
+    if (game->current_turn != seat) {
+        return 0;
+    }
+    if (game->phase < PHASE_PREFLOP || game->phase > PHASE_RIVER) {
         return 0;
     }
 
     const Player *player = &game->players[seat];
+    if (player->status != PLAYER_ACTIVE) {
+        return 0;
+    }
 
-    if (strcmp(action, "FOLD") == 0)
-    {
+    if (strcmp(action, "FOLD") == 0) {
         return 1;
-        // CHECK: If the player has already matched the current bet, they can check.
     }
-    else if (strcmp(action, "CHECK") == 0)
-    {
+    if (strcmp(action, "CHECK") == 0) {
         return player->current_bet >= game->current_bet;
-        // CALL: If the player has not yet matched the current bet, they can call if they have enough points.
     }
-    else if (strcmp(action, "CALL") == 0)
-    {
-        return player->current_bet < game->current_bet &&
-               player->points >= (game->current_bet - player->current_bet);
-        // RAISE: If the player has not yet matched the current bet, they can raise if they have enough points and the raise amount is valid.
+    if (strcmp(action, "CALL") == 0) {
+        int to_call = game->current_bet - player->current_bet;
+        return to_call > 0 && player->points >= to_call;
     }
-    else if (strcmp(action, "RAISE") == 0)
-    {
-        int min_raise = game->current_bet * 2 - player->current_bet;
-        return raise_amount >= min_raise && raise_amount <= player->points;
+    if (strcmp(action, "RAISE") == 0) {
+        int new_total = raise_amount;
+        int cost = new_total - player->current_bet;
+        int min_total = game->current_bet == 0 ? 1 : game->current_bet + 1;
+        return new_total >= min_total && cost > 0 && cost <= player->points;
     }
+
     return 0;
 }
 
-/*Gonna implement these function later, just wanted to get the header file done first.
-Lowkey hella work so some help would be appreciated. Some function are set to return 0 for now
-so nothing breaks (hopefully)
--jim
-*/
 int poker_apply_action(GameState *game, int seat, const char *action, int raise_amount)
 {
-    return 0;
+    if (!poker_action_is_legal(game, seat, action, raise_amount)) {
+        return 0;
+    }
+
+    Player *player = &game->players[seat];
+
+    if (strcmp(action, "FOLD") == 0) {
+        player->status = PLAYER_FOLDED;
+        game->acted_this_round[seat] = 1;
+    } else if (strcmp(action, "CHECK") == 0) {
+        game->acted_this_round[seat] = 1;
+    } else if (strcmp(action, "CALL") == 0) {
+        int to_call = game->current_bet - player->current_bet;
+        player->points -= to_call;
+        player->current_bet += to_call;
+        game->pot += to_call;
+        game->acted_this_round[seat] = 1;
+    } else if (strcmp(action, "RAISE") == 0) {
+        int cost = raise_amount - player->current_bet;
+        player->points -= cost;
+        player->current_bet = raise_amount;
+        game->pot += cost;
+        game->current_bet = raise_amount;
+        /* A raise reopens action for everyone else still in the hand. */
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            game->acted_this_round[i] = 0;
+        }
+        game->acted_this_round[seat] = 1;
+    }
+
+    if (poker_count_active_players(game) <= 1) {
+        /* Everyone else folded, so the remaining active player wins now. */
+        int winner = poker_get_first_active_player(game);
+        if (winner >= 0) {
+            game->players[winner].points += game->pot;
+            game->pot = 0;
+        }
+        game->phase = PHASE_GAME_OVER;
+        game->current_turn = -1;
+        return 1;
+    }
+
+    if (poker_is_betting_round_finished(game)) {
+        /* All active players have acted and matched the bet. Move streets. */
+        poker_advance_phase(game);
+    } else {
+        game->current_turn = poker_get_next_active_player(game, seat);
+    }
+
+    return 1;
 }
 
 int poker_is_betting_round_finished(const GameState *game)
 {
-    return 0;
+    if (game == NULL) {
+        return 0;
+    }
+
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        const Player *player = &game->players[i];
+        if (player->status == PLAYER_ACTIVE && player->points > 0) {
+            if (!game->acted_this_round[i]) {
+                return 0;
+            }
+            if (player->current_bet < game->current_bet) {
+                return 0;
+            }
+        }
+    }
+
+    return poker_count_active_players(game) > 0;
 }
 
-void poker_advance_phase(GameState *game);
+void poker_advance_phase(GameState *game)
+{
+    if (game == NULL) {
+        return;
+    }
 
-void poker_resolve_showdown(GameState *game);
+    reset_round_bets(game);
+
+    if (game->phase == PHASE_PREFLOP) {
+        game->community_cards[0] = deal_card(&game->deck);
+        game->community_cards[1] = deal_card(&game->deck);
+        game->community_cards[2] = deal_card(&game->deck);
+        game->community_count = 3;
+        game->phase = PHASE_FLOP;
+    } else if (game->phase == PHASE_FLOP) {
+        game->community_cards[3] = deal_card(&game->deck);
+        game->community_count = 4;
+        game->phase = PHASE_TURN;
+    } else if (game->phase == PHASE_TURN) {
+        game->community_cards[4] = deal_card(&game->deck);
+        game->community_count = 5;
+        game->phase = PHASE_RIVER;
+    } else if (game->phase == PHASE_RIVER) {
+        game->phase = PHASE_SHOWDOWN;
+        poker_resolve_showdown(game);
+        return;
+    }
+
+    game->current_turn = poker_get_first_active_player(game);
+}
+
+void poker_resolve_showdown(GameState *game)
+{
+    if (game == NULL) {
+        return;
+    }
+
+    int winners[MAX_PLAYERS];
+    int count = poker_find_showdown_winners(game, winners, MAX_PLAYERS);
+
+    if (count > 0) {
+        /* Split ties evenly; the first winner receives any odd remainder. */
+        int share = game->pot / count;
+        int remainder = game->pot % count;
+        for (int i = 0; i < count; i++) {
+            game->players[winners[i]].points += share;
+            if (i == 0) {
+                game->players[winners[i]].points += remainder;
+            }
+        }
+    }
+
+    game->pot = 0;
+    game->current_turn = -1;
+    game->phase = PHASE_GAME_OVER;
+}
 
 int poker_find_showdown_winners(const GameState *game, int winners[], int max_winners)
 {
-    return 0;
+    if (game == NULL || winners == NULL || max_winners <= 0 || game->community_count < 5) {
+        return 0;
+    }
+
+    PokerHandValue best;
+    int found = 0;
+    int winner_count = 0;
+
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        const Player *player = &game->players[i];
+        if (player->status != PLAYER_ACTIVE) {
+            continue;
+        }
+
+        Card cards[7];
+        cards[0] = player->hand[0];
+        cards[1] = player->hand[1];
+        for (int c = 0; c < COMMUNITY_CARD_SIZE; c++) {
+            cards[c + 2] = game->community_cards[c];
+        }
+
+        PokerHandValue value;
+        poker_evaluate_hand(cards, &value);
+
+        if (!found || poker_compare_hands(&value, &best) > 0) {
+            best = value;
+            winners[0] = i;
+            winner_count = 1;
+            found = 1;
+        } else if (poker_compare_hands(&value, &best) == 0 && winner_count < max_winners) {
+            winners[winner_count++] = i;
+        }
+    }
+
+    return winner_count;
 }
 
 int poker_count_active_players(const GameState *game)
 {
-    return 0;
+    int count = 0;
+    if (game == NULL) {
+        return 0;
+    }
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (game->players[i].status == PLAYER_ACTIVE) {
+            count++;
+        }
+    }
+    return count;
 }
 
-/*
-returns the seat index of the first active player, or -1 if none.
-*/
 int poker_get_first_active_player(const GameState *game)
 {
     if (game == NULL) {
         return -1;
     }
-    for (int i = 0; i < game->player_count; ++i) {
+    for (int i = 0; i < MAX_PLAYERS; ++i) {
+        if (active_player_has_chips(&game->players[i])) {
+            return i;
+        }
+    }
+    for (int i = 0; i < MAX_PLAYERS; ++i) {
         if (game->players[i].status == PLAYER_ACTIVE) {
             return i;
         }
@@ -96,63 +270,48 @@ int poker_get_first_active_player(const GameState *game)
     return -1;
 }
 
-/*
-returns the next active player after a given seat (wrapping around), or -1 if none.
-*/
 int poker_get_next_active_player(const GameState *game, int seat)
 {
-    if (game == NULL || game->player_count == 0) {
+    if (game == NULL) {
         return -1;
     }
-    int start = (seat + 1) % game->player_count;
+    int start = (seat + 1 + MAX_PLAYERS) % MAX_PLAYERS;
     int i = start;
     do {
-        if (game->players[i].status == PLAYER_ACTIVE) {
+        if (active_player_has_chips(&game->players[i])) {
             return i;
         }
-        i = (i + 1) % game->player_count;
+        i = (i + 1) % MAX_PLAYERS;
     } while (i != start);
-    return -1;
+    return poker_get_first_active_player(game);
 }
 
-/*
-Compares two poker hands
-0: Complete Tie
-1: First hand is better then second
--1: Second hand is better then second
-*/
 int poker_compare_hands(const PokerHandValue *a, const PokerHandValue *b)
 {
     if (a == NULL || b == NULL) {
         return 0;
     }
-    // Compare hand ranks first
     if (a->rank > b->rank) {
         return 1;
-    } else if (a->rank < b->rank) {
+    }
+    if (a->rank < b->rank) {
         return -1;
     }
-    // If ranks are equal, compare tiebreaker values
     for (int i = 0; i < 5; ++i) {
         if (a->values[i] > b->values[i]) {
             return 1;
-        } else if (a->values[i] < b->values[i]) {
+        }
+        if (a->values[i] < b->values[i]) {
             return -1;
         }
     }
-    // Completely tied
     return 0;
 }
 
-/*
-Takes the 7 cards from the total community cards and the 2 private and find the best 5-card hand rank and tiebreakers according to poker rules.
-Fills PokerHandValue with the best hand.
-*/
-void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
+static void poker_evaluate_fixed_hand(const Card cards[7], PokerHandValue *value)
 {
     if (!value) return;
-    // Count occurrences of each rank and suit
-    int rank_count[15] = {0}; // RANK_TWO=2 ... RANK_ACE=14
+    int rank_count[15] = {0};
     int suit_count[4] = {0};
     for (int i = 0; i < 7; ++i) {
         if (cards[i].rank >= RANK_TWO && cards[i].rank <= RANK_ACE)
@@ -161,7 +320,6 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
             suit_count[cards[i].suit]++;
     }
 
-    // Find flush
     int flush_suit = -1;
     for (int s = 0; s < 4; ++s) {
         if (suit_count[s] >= 5) {
@@ -170,7 +328,6 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
         }
     }
 
-    // Find straight (and straight flush)
     int straight_high = 0, straight_flush_high = 0;
     for (int start = 14; start >= 5; --start) {
         int found = 1;
@@ -182,11 +339,10 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
         }
         if (found) {
             straight_high = start;
-            // Check for straight flush
             if (flush_suit != -1) {
                 int count = 0;
                 for (int i = 0; i < 7; ++i) {
-                    if (cards[i].suit == flush_suit && cards[i].rank <= start && cards[i].rank >= start - 4)
+                    if ((int)cards[i].suit == flush_suit && (int)cards[i].rank <= start && (int)cards[i].rank >= start - 4)
                         count++;
                 }
                 if (count >= 5) straight_flush_high = start;
@@ -194,13 +350,12 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
             break;
         }
     }
-    // Special case: wheel straight (A-2-3-4-5)
     if (!straight_high && rank_count[RANK_ACE] && rank_count[RANK_TWO] && rank_count[RANK_THREE] && rank_count[RANK_FOUR] && rank_count[RANK_FIVE]) {
         straight_high = 5;
         if (flush_suit != -1) {
             int count = 0;
             for (int i = 0; i < 7; ++i) {
-                if (cards[i].suit == flush_suit &&
+                if ((int)cards[i].suit == flush_suit &&
                     (cards[i].rank == RANK_ACE || (cards[i].rank >= RANK_TWO && cards[i].rank <= RANK_FIVE)))
                     count++;
             }
@@ -208,7 +363,6 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
         }
     }
 
-    // Count multiples (pairs, trips, quads)
     int pairs[3] = {0}, npairs = 0, trips[2] = {0}, ntrips = 0, quad = 0;
     for (int r = 14; r >= 2; --r) {
         if (rank_count[r] == 4) quad = r;
@@ -216,7 +370,6 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
         else if (rank_count[r] == 2 && npairs < 3) pairs[npairs++] = r;
     }
 
-    // Fill PokerHandValue
     if (straight_flush_high) {
         value->rank = HAND_RANK_STRAIGHT_FLUSH;
         value->values[0] = straight_flush_high;
@@ -226,7 +379,6 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
     if (quad) {
         value->rank = HAND_RANK_FOUR_OF_A_KIND;
         value->values[0] = quad;
-        // Kicker
         for (int r = 14; r >= 2; --r) {
             if (r != quad && rank_count[r]) { value->values[1] = r; break; }
         }
@@ -240,7 +392,7 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
         for (int i = 2; i < 5; ++i) value->values[i] = 0;
         return;
     }
-    if (ntrips > 1) { // Double trips: use highest as trips, next as pair
+    if (ntrips > 1) {
         value->rank = HAND_RANK_FULL_HOUSE;
         value->values[0] = trips[0];
         value->values[1] = trips[1];
@@ -252,7 +404,7 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
         int count = 0;
         for (int r = 14; r >= 2 && count < 5; --r) {
             for (int i = 0; i < 7 && count < 5; ++i) {
-                if (cards[i].suit == flush_suit && cards[i].rank == r) {
+                if ((int)cards[i].suit == flush_suit && (int)cards[i].rank == r) {
                     value->values[count++] = r;
                 }
             }
@@ -297,17 +449,72 @@ void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
         while (count < 5) value->values[count++] = 0;
         return;
     }
-    // High card
     value->rank = HAND_RANK_HIGH_CARD;
     int count = 0;
     for (int r = 14; r >= 2 && count < 5; --r) {
         if (rank_count[r]) value->values[count++] = r;
     }
     while (count < 5) value->values[count++] = 0;
-    return;
+}
+
+void poker_evaluate_hand(const Card cards[7], PokerHandValue *value)
+{
+    int wildcard_index = -1;
+
+    if (value == NULL) {
+        return;
+    }
+
+    /*
+     * Wild Grab stores a wildcard as an invalid card in the player's private
+     * hand. For evaluation, try every possible real card and keep the best.
+     */
+    for (int i = 0; i < 7; i++) {
+        if (!is_valid_card(cards[i])) {
+            wildcard_index = i;
+            break;
+        }
+    }
+
+    if (wildcard_index < 0) {
+        poker_evaluate_fixed_hand(cards, value);
+        return;
+    }
+
+    int found = 0;
+    PokerHandValue best;
+    Card trial[7];
+    for (int i = 0; i < 7; i++) {
+        trial[i] = cards[i];
+    }
+
+    for (Suit suit = SUIT_HEARTS; suit <= SUIT_SPADES; suit++) {
+        for (Rank rank = RANK_TWO; rank <= RANK_ACE; rank++) {
+            PokerHandValue candidate;
+            trial[wildcard_index] = create_card(rank, suit);
+            poker_evaluate_fixed_hand(trial, &candidate);
+            if (!found || poker_compare_hands(&candidate, &best) > 0) {
+                best = candidate;
+                found = 1;
+            }
+        }
+    }
+
+    *value = best;
 }
 
 const char *poker_hand_rank_to_string(PokerHandRank rank)
 {
-    return "Not implemented yet";
+    switch (rank) {
+        case HAND_RANK_HIGH_CARD: return "High Card";
+        case HAND_RANK_PAIR: return "Pair";
+        case HAND_RANK_TWO_PAIR: return "Two Pair";
+        case HAND_RANK_THREE_OF_A_KIND: return "Three of a Kind";
+        case HAND_RANK_STRAIGHT: return "Straight";
+        case HAND_RANK_FLUSH: return "Flush";
+        case HAND_RANK_FULL_HOUSE: return "Full House";
+        case HAND_RANK_FOUR_OF_A_KIND: return "Four of a Kind";
+        case HAND_RANK_STRAIGHT_FLUSH: return "Straight Flush";
+        default: return "Unknown";
+    }
 }
