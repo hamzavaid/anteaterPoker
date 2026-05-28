@@ -75,6 +75,7 @@ typedef struct {
     int dealer_seat;
     int pot;
     int current_bet;
+    int acted_this_round[MAX_PLAYERS];
     Deck deck;
     Card community_cards[COMMUNITY_CARD_SIZE];
     int community_count;

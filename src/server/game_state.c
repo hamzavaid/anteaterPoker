@@ -87,6 +87,9 @@ void init_game_state(GameState *game, const ServerConfig *config, int server_fd)
     game->pot = 0;
     game->current_bet = 0;
     game->community_count = 0;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        game->acted_this_round[i] = 0;
+    }
 
     /* Initialize the standard 52-card deck. */
     init_deck(&game->deck);
@@ -242,6 +245,9 @@ void start_new_hand(GameState *game)
     game->pot = 0;
     game->current_bet = 0;
     game->community_count = 0;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        game->acted_this_round[i] = 0;
+    }
 
     /* Clear old community cards. */
     for (int i = 0; i < COMMUNITY_CARD_SIZE; i++) {
@@ -454,6 +460,8 @@ void build_public_game_state(const GameState *game, char *buffer, int buffer_siz
     }
 
     char community_cards[256] = "";
+    char player_summary[512] = "";
+    int visible_players = 0;
     for (int i = 0; i < game->community_count; i++) {
         char card_str[64];
         card_to_string(game->community_cards[i], card_str, sizeof(card_str));
@@ -464,16 +472,44 @@ void build_public_game_state(const GameState *game, char *buffer, int buffer_siz
         strncat(community_cards, card_str, sizeof(community_cards) - strlen(community_cards) - 1);
     }
 
+    /*
+     * Public player summaries let every client show opponent names, points,
+     * bets, and folded/active status without exposing private cards.
+     * Entry format: seat|name|points|bet|status
+     */
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        const Player *player = &game->players[i];
+        char entry[96];
+
+        if (player->status == PLAYER_EMPTY ||
+            (player->status == PLAYER_CONNECTED && strcmp(player->name, "Guest") == 0)) {
+            continue;
+        }
+
+        visible_players++;
+
+        snprintf(entry, sizeof(entry), "%s%d|%s|%d|%d|%d",
+                 player_summary[0] ? "," : "",
+                 i,
+                 player->name,
+                 player->points,
+                 player->current_bet,
+                 player->status);
+        strncat(player_summary, entry,
+                sizeof(player_summary) - strlen(player_summary) - 1);
+    }
+
     snprintf(
         buffer,
         buffer_size,
-        "STAT:-1:phase=%s;players=%d;pot=%d;turn=%d;community=%d;community_cards=%s\n",
+        "STAT:-1:phase=%s;players=%d;pot=%d;turn=%d;community=%d;community_cards=%s;player_state=%s\n",
         game_phase_to_string(game->phase),
-        game->player_count,
+        visible_players,
         game->pot,
         game->current_turn,
         game->community_count,
-        community_cards
+        community_cards,
+        player_summary
     );
 }
 
@@ -486,7 +522,7 @@ void build_public_game_state(const GameState *game, char *buffer, int buffer_siz
  * This must only be sent to the matching client.
  *
  * Format:
- *   HAND:<seat>:<card1>,<card2>,ability=<ability>
+ *   HAND:<seat>:<card1>,<card2>,ability=<ability>;points=<points>
  */
 void build_private_hand_message(const GameState *game, int seat, char *buffer, int buffer_size)
 {
@@ -500,17 +536,26 @@ void build_private_hand_message(const GameState *game, int seat, char *buffer, i
     char card1[64];
     char card2[64];
 
-    /* Convert card structs into readable strings. */
-    card_to_string(player->hand[0], card1, sizeof(card1));
-    card_to_string(player->hand[1], card2, sizeof(card2));
+    /* Convert card structs into readable strings. Wild Grab uses invalid_card as wildcard. */
+    if (!is_valid_card(player->hand[0])) {
+        snprintf(card1, sizeof(card1), "wildcard");
+    } else {
+        card_to_string(player->hand[0], card1, sizeof(card1));
+    }
+    if (!is_valid_card(player->hand[1])) {
+        snprintf(card2, sizeof(card2), "wildcard");
+    } else {
+        card_to_string(player->hand[1], card2, sizeof(card2));
+    }
 
     snprintf(
         buffer,
         buffer_size,
-        "HAND:%d:%s,%s,ability=%s\n",
+        "HAND:%d:%s,%s,ability=%s;points=%d\n",
         seat,
         card1,
         card2,
-        ability_to_string(player->ability.type)
+        ability_to_string(player->ability.type),
+        player->points
     );
 }

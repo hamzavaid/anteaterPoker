@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 /*
  * poker.c
  *
@@ -46,6 +48,12 @@ static void build_card_asset_path(char *out, size_t out_size, const char *card_t
     }
 
     if (card_text == NULL)
+    {
+        snprintf(out, out_size, "%s", "src/assets/back_of_card.png");
+        return;
+    }
+
+    if (strcmp(card_text, "wildcard") == 0 || strcmp(card_text, "invalid_card") == 0)
     {
         snprintf(out, out_size, "%s", "src/assets/back_of_card.png");
         return;
@@ -173,6 +181,57 @@ static AbilityType ability_from_string(const char *ability)
     return ABILITY_NONE;
 }
 
+static void update_player_widgets_from_state(ClientState *client, const char *player_state)
+{
+    char copy[512];
+    int opponent_slot = 0;
+    char *saveptr = NULL;
+
+    if (client == NULL || player_state == NULL)
+    {
+        return;
+    }
+
+    snprintf(copy, sizeof(copy), "%s", player_state);
+    poker_gui_clear_opponents();
+
+    /*
+     * player_state is public server data:
+     * seat|name|points|bet|status,seat|name|points|bet|status
+     */
+    char *entry = strtok_r(copy, ",", &saveptr);
+    while (entry != NULL)
+    {
+        int seat = -1;
+        int points = 0;
+        int bet = 0;
+        int status = PLAYER_EMPTY;
+        char name[MAX_NAME_LEN];
+
+        name[0] = '\0';
+
+        if (sscanf(entry, "%d|%31[^|]|%d|%d|%d",
+                   &seat, name, &points, &bet, &status) == 5)
+        {
+            if (seat == client->seat)
+            {
+                poker_gui_set_stack(points);
+            }
+            else if (opponent_slot < CLIENT_MAX_PLAYERS - 1)
+            {
+                char info[64];
+                snprintf(info, sizeof(info), "Pts %d  Bet %d", points, bet);
+                poker_gui_update_slot(opponent_slot, name, info,
+                                      seat == client->current_turn,
+                                      status == PLAYER_FOLDED);
+                opponent_slot++;
+            }
+        }
+
+        entry = strtok_r(NULL, ",", &saveptr);
+    }
+}
+
 /*
  * Parses command-line arguments for the client.
  *
@@ -199,19 +258,19 @@ static void parse_client_args(
     for (int i = 1; i < argc; i++)
     {
         /* Read the server host. */
-        if (strcmp(argv[i], "--host") == 0 && i + 1 < argc)
+        if ((strcmp(argv[i], "--host") == 0 || strstr(argv[i], "host") != NULL) && i + 1 < argc)
         {
             snprintf(host, host_size, "%s", argv[++i]);
         }
 
         /* Read the server port. */
-        else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc)
+        else if ((strcmp(argv[i], "--port") == 0 || strstr(argv[i], "port") != NULL) && i + 1 < argc)
         {
             *port = atoi(argv[++i]);
         }
 
         /* Read the player display name. */
-        else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc)
+        else if ((strcmp(argv[i], "--name") == 0 || strstr(argv[i], "name") != NULL) && i + 1 < argc)
         {
             snprintf(name, name_size, "%s", argv[++i]);
         }
@@ -261,13 +320,16 @@ static void parse_stat_message(ClientState *client, const char *message)
             char tmp[512];
             // copy until newline or end
             int i = 0;
-            const char *end = strchr(p, '\n');
+            const char *end = strchr(p, ';');
+            if (end == NULL)
+                end = strchr(p, '\n');
             int len = end ? (int)(end - p) : (int)strlen(p);
             if (len >= (int)sizeof(tmp)) len = sizeof(tmp) - 1;
             memcpy(tmp, p, len);
             tmp[len] = '\0';
 
-            char *tok = strtok(tmp, ",");
+            char *card_saveptr = NULL;
+            char *tok = strtok_r(tmp, ",", &card_saveptr);
             while (tok && i < COMMUNITY_CARD_SIZE) {
                 // trim whitespace if needed
                 while (*tok == ' ') tok++;
@@ -280,9 +342,25 @@ static void parse_stat_message(ClientState *client, const char *message)
                     poker_gui_set_community_card(i, asset_path);
                     i++;
                 }
-                tok = strtok(NULL, ",");
+                tok = strtok_r(NULL, ",", &card_saveptr);
             }
             client->community_count = i;
+        }
+
+        const char *players_text = strstr(message, "player_state=");
+        if (players_text)
+        {
+            char player_tmp[512];
+            const char *end = strchr(players_text, '\n');
+            int len;
+
+            players_text += strlen("player_state=");
+            len = end ? (int)(end - players_text) : (int)strlen(players_text);
+            if (len >= (int)sizeof(player_tmp))
+                len = sizeof(player_tmp) - 1;
+            memcpy(player_tmp, players_text, len);
+            player_tmp[len] = '\0';
+            update_player_widgets_from_state(client, player_tmp);
         }
 
         // update GUI pot
@@ -325,6 +403,7 @@ static void parse_hand_message(ClientState *client, const char *message)
 
     /* Stores the ability string from the server. */
     char ability_text[64];
+    int points = 0;
 
     /* Make sure inputs are valid. */
     if (client == NULL || message == NULL)
@@ -341,16 +420,17 @@ static void parse_hand_message(ClientState *client, const char *message)
      */
     int matched = sscanf(
         message,
-        "HAND:%d:%127[^,],%127[^,],ability=%63s",
+        "HAND:%d:%127[^,],%127[^,],ability=%63[^;];points=%d",
         &seat,
         card1_text,
         card2_text,
-        ability_text);
+        ability_text,
+        &points);
 
     /*
      * If parsing worked, update the client's ability and status.
      */
-    if (matched == 4)
+    if (matched >= 4)
     {
         client->seat = seat;
         client->ability = ability_from_string(ability_text);
@@ -362,8 +442,13 @@ static void parse_hand_message(ClientState *client, const char *message)
         poker_gui_set_my_card(0, path1);
         poker_gui_set_my_card(1, path2);
 
-        // update stack display
-        poker_gui_set_stack(client->pot);
+        // update stack display using the server-authoritative point total
+        if (matched == 5)
+            poker_gui_set_stack(points);
+
+        char ability_label[96];
+        snprintf(ability_label, sizeof ability_label, "Ability: %s", ability_text);
+        poker_gui_set_ability(ability_label);
 
         set_client_status(client, "Received private hand.");
         poker_gui_set_status("Cards dealt. Good luck!");
@@ -451,6 +536,19 @@ static void handle_single_server_message(ClientState *client, const char *messag
     }
 
     /*
+     * ABIL messages contain the private result of an Anteater ability.
+     * Sniff, for example, can reveal a card only to the player who used it.
+     */
+    else if (strncmp(message, "ABIL:", 5) == 0)
+    {
+        const char *payload = strchr(message + 5, ':');
+        if (payload)
+            payload++;
+        poker_gui_set_status(payload ? payload : "Ability resolved.");
+        set_client_status(client, "Ability resolved.");
+    }
+
+    /*
      * INFO message is just informational.
      */
     else if (strncmp(message, "INFO:", 5) == 0)
@@ -474,6 +572,7 @@ static void handle_server_buffer(ClientState *client, const char *buffer)
 {
     /* Local copy because strtok modifies the string. */
     char copy[CLIENT_BUFFER_SIZE];
+    char *saveptr = NULL;
 
     /* Make sure inputs are valid. */
     if (client == NULL || buffer == NULL)
@@ -485,13 +584,13 @@ static void handle_server_buffer(ClientState *client, const char *buffer)
     snprintf(copy, sizeof(copy), "%s", buffer);
 
     /* Split the buffer into lines using newline as the delimiter. */
-    char *line = strtok(copy, "\n");
+    char *line = strtok_r(copy, "\n", &saveptr);
 
     /* Process every complete line. */
     while (line != NULL)
     {
         handle_single_server_message(client, line);
-        line = strtok(NULL, "\n");
+        line = strtok_r(NULL, "\n", &saveptr);
     }
 }
 
@@ -536,12 +635,6 @@ static gboolean on_server_readable(GIOChannel *channel, GIOCondition cond, gpoin
  */
 int main(int argc, char *argv[])
 {
-    if (!gtk_init_check(&argc, &argv))
-    {
-        fprintf(stderr, "Failed to initialize GTK. Check DISPLAY/WSLg or run from a graphical session.\n");
-        return 1;
-    }
-
     char host[128];
     char name[CLIENT_NAME_LEN];
     int port;
@@ -549,6 +642,17 @@ int main(int argc, char *argv[])
     init_client_state(&g_client);
     parse_client_args(argc, argv, host, sizeof host, &port, name, sizeof name);
     set_client_name(&g_client, name);
+
+    /*
+     * Parse poker options before GTK initialization. GTK consumes options like
+     * --name for its own resource naming, which would otherwise hide the
+     * player's display name from our client parser.
+     */
+    if (!gtk_init_check(&argc, &argv))
+    {
+        fprintf(stderr, "Failed to initialize GTK. Check DISPLAY/WSLg or run from a graphical session.\n");
+        return 1;
+    }
 
     printf("Connecting to %s:%d as %s...\n", host, port, name);
 

@@ -24,6 +24,8 @@
 #include <gtk/gtk.h>
 
 #include "game_state.h"
+#include "poker_rules.h"
+#include "anteater_abilities.h"
 #include "socket_server.h"
 #include "server_gui.h"
 #include "server_public.h"
@@ -87,6 +89,7 @@ static void collect_client_fds(const GameState *game, int fds[], int *num_client
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
         if (game->players[i].status != PLAYER_EMPTY &&
+            strcmp(game->players[i].name, "Guest") != 0 &&
             game->players[i].socket_fd >= 0)
         {
             fds[*num_clients] = game->players[i].socket_fd;
@@ -140,7 +143,7 @@ void send_public_state_to_all(const GameState *game)
  * Sends each active player their own private hand message.
  * Each private hand must only be sent to that player's socket.
  */
-static void send_private_hands(GameState *game)
+void send_private_hands_to_all(GameState *game)
 {
     char hand_msg[MESSAGE_BUFFER_SIZE];
 
@@ -217,7 +220,7 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
     {
         start_new_hand(game);
         send_public_state_to_all(game);
-        send_private_hands(game);
+        send_private_hands_to_all(game);
         server_gui_refresh();
         return;
     }
@@ -244,40 +247,15 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
             return;
         }
 
-        if (strcmp(msg.payload, "FOLD") == 0)
-        {
-            game->players[seat].status = PLAYER_FOLDED;
-            send_message(client_fd, "OK:-1:Fold accepted\n");
-        }
-        else if (strcmp(msg.payload, "CHECK") == 0)
-        {
-            send_message(client_fd, "OK:-1:Check accepted\n");
-        }
-        else if (strcmp(msg.payload, "CALL") == 0)
-        {
-            send_message(client_fd, "OK:-1:Call accepted\n");
-        }
-        else
+        if (!poker_apply_action(game, seat, msg.payload, 0))
         {
             send_message(client_fd, "ERROR:-1:Illegal action\n");
             return;
         }
 
-        /* Simple turn advancement for now.
-         * Later, the rules module should decide when a betting round ends.
-         */
-        for (int i = 1; i <= MAX_PLAYERS; i++)
-        {
-            int next = (seat + i) % MAX_PLAYERS;
-
-            if (game->players[next].status == PLAYER_ACTIVE)
-            {
-                game->current_turn = next;
-                break;
-            }
-        }
-
+        send_message(client_fd, "OK:-1:Action accepted\n");
         send_public_state_to_all(game);
+        send_private_hands_to_all(game);
         server_gui_refresh();
         return;
     }
@@ -300,19 +278,51 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
             return;
         }
 
-        if (amount <= 0 || amount > game->players[seat].points)
+        if (!poker_apply_action(game, seat, "RAISE", amount))
         {
             send_message(client_fd, "ERROR:-1:Invalid raise amount\n");
             return;
         }
 
-        game->players[seat].points -= amount;
-        game->players[seat].current_bet += amount;
-        game->pot += amount;
-        game->current_bet = game->players[seat].current_bet;
-
         send_message(client_fd, "OK:-1:Raise accepted\n");
         send_public_state_to_all(game);
+        send_private_hands_to_all(game);
+        server_gui_refresh();
+        return;
+    }
+
+    /*
+     * ABIL command:
+     * Uses the player's once-per-hand Anteater ability.
+     * Payload format: <target_seat>[:param]
+     */
+    if (strcmp(msg.command, "ABIL") == 0)
+    {
+        int seat = find_seat_by_socket(game, client_fd);
+        int target = -1;
+        int param = 0;
+        char result[256];
+        char reply[MESSAGE_BUFFER_SIZE];
+
+        if (seat < 0)
+        {
+            send_message(client_fd, "ERROR:-1:Player not logged in\n");
+            return;
+        }
+
+        sscanf(msg.payload, "%d:%d", &target, &param);
+
+        if (!anteater_apply_ability(game, seat, target, param, result, sizeof(result)))
+        {
+            snprintf(reply, sizeof(reply), "ERROR:-1:%s\n", result);
+            send_message(client_fd, reply);
+            return;
+        }
+
+        snprintf(reply, sizeof(reply), "ABIL:%d:%s\n", seat, result);
+        send_message(client_fd, reply);
+        send_public_state_to_all(game);
+        send_private_hands_to_all(game);
         server_gui_refresh();
         return;
     }

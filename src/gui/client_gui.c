@@ -25,6 +25,9 @@ static GtkWidget* g_status_label = NULL;
 static GtkWidget* g_pot_label = NULL;
 static GtkWidget* g_stack_label = NULL;
 static GtkWidget* g_raise_input = NULL;
+static GtkWidget* g_ability_target_input = NULL;
+static GtkWidget* g_ability_param_input = NULL;
+static GtkWidget* g_ability_label = NULL;
 
 static GtkWidget* g_comm_card_img[MAX_COMM_CARDS];
 static GtkWidget* g_my_card_img[2];
@@ -207,7 +210,7 @@ void poker_gui_set_stack(int amount)
 {
     if (!g_stack_label) return;
     char buf[64];
-    snprintf(buf, sizeof buf, "Stack: %d", amount);
+    snprintf(buf, sizeof buf, "Points: %d", amount);
     gtk_label_set_text(GTK_LABEL(g_stack_label), buf);
 }
 
@@ -215,6 +218,19 @@ void poker_gui_set_status(const char* msg)
 {
     if (!g_status_label) return;
     gtk_label_set_text(GTK_LABEL(g_status_label), msg);
+}
+
+void poker_gui_set_ability(const char* ability)
+{
+    if (!g_ability_label) return;
+    gtk_label_set_text(GTK_LABEL(g_ability_label), ability ? ability : "Ability: NONE");
+}
+
+void poker_gui_clear_opponents(void)
+{
+    for (int i = 0; i < MAX_PLAYERS - 1; i++) {
+        poker_gui_update_slot(i, "", "", 0, 0);
+    }
 }
 
 void poker_gui_set_community_card(int idx, const char* path)
@@ -329,6 +345,23 @@ static void on_fold(GtkButton* b, gpointer d)
     send_to_server(g_server_fd, "ACTN:-1:FOLD\n");
 }
 
+static void on_ability(GtkButton* b, gpointer d)
+{
+    (void)b; (void)d;
+    const char* target = "0";
+    const char* param = "0";
+    char msg[64];
+
+    if (g_ability_target_input)
+        target = gtk_entry_get_text(GTK_ENTRY(g_ability_target_input));
+    if (g_ability_param_input)
+        param = gtk_entry_get_text(GTK_ENTRY(g_ability_param_input));
+
+    snprintf(msg, sizeof msg, "ABIL:-1:%s:%s\n", target, param);
+    poker_gui_set_status("Ability used.");
+    send_to_server(g_server_fd, msg);
+}
+
 static void on_quit(GtkButton* b, gpointer d)
 {
     (void)b;
@@ -424,9 +457,13 @@ static GtkWidget* build_right_panel(void)
         gtk_widget_set_name(lbl, "side_label");
         gtk_box_pack_start(GTK_BOX(inner), lbl, FALSE, FALSE, 0);
 
-        g_stack_label = gtk_label_new("Stack: 0");
+        g_stack_label = gtk_label_new("Points: 0");
         gtk_widget_set_name(g_stack_label, "stack_text");
         gtk_box_pack_start(GTK_BOX(inner), g_stack_label, FALSE, FALSE, 0);
+
+        g_ability_label = gtk_label_new("Ability: NONE");
+        gtk_widget_set_name(g_ability_label, "stack_text");
+        gtk_box_pack_start(GTK_BOX(inner), g_ability_label, FALSE, FALSE, 0);
 
 		//raise input row (label + entry)
         GtkWidget* raise_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
@@ -439,23 +476,48 @@ static GtkWidget* build_right_panel(void)
         gtk_box_pack_start(GTK_BOX(raise_row), g_raise_input, TRUE, TRUE, 0);
         gtk_box_pack_start(GTK_BOX(inner), raise_row, FALSE, FALSE, 0);
 
+        // Ability target row. Target is opponent seat, or your card index for swap/wildcard abilities.
+        GtkWidget* ability_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+        GtkWidget* ability_lbl = gtk_label_new("Target:");
+        gtk_widget_set_name(ability_lbl, "raise_label");
+        gtk_box_pack_start(GTK_BOX(ability_row), ability_lbl, FALSE, FALSE, 0);
+        g_ability_target_input = gtk_entry_new();
+        gtk_entry_set_text(GTK_ENTRY(g_ability_target_input), "0");
+        gtk_widget_set_size_request(g_ability_target_input, 70, -1);
+        gtk_box_pack_start(GTK_BOX(ability_row), g_ability_target_input, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(inner), ability_row, FALSE, FALSE, 0);
+
+        GtkWidget* ability_param_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+        GtkWidget* ability_param_lbl = gtk_label_new("Param:");
+        gtk_widget_set_name(ability_param_lbl, "raise_label");
+        gtk_box_pack_start(GTK_BOX(ability_param_row), ability_param_lbl, FALSE, FALSE, 0);
+        g_ability_param_input = gtk_entry_new();
+        gtk_entry_set_text(GTK_ENTRY(g_ability_param_input), "0");
+        gtk_widget_set_size_request(g_ability_param_input, 70, -1);
+        gtk_box_pack_start(GTK_BOX(ability_param_row), g_ability_param_input, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(inner), ability_param_row, FALSE, FALSE, 0);
+
         //action buttons
         GtkWidget* btn_call = gtk_button_new_with_label("CALL");
         GtkWidget* btn_raise = gtk_button_new_with_label("RAISE");
         GtkWidget* btn_check = gtk_button_new_with_label("CHECK");
         GtkWidget* btn_fold = gtk_button_new_with_label("FOLD");
+        GtkWidget* btn_ability = gtk_button_new_with_label("ABILITY");
         gtk_widget_set_name(btn_call, "btn_call");
         gtk_widget_set_name(btn_raise, "btn_raise");
         gtk_widget_set_name(btn_check, "btn_check");
         gtk_widget_set_name(btn_fold, "btn_fold");
+        gtk_widget_set_name(btn_ability, "btn_raise");
         gtk_box_pack_start(GTK_BOX(inner), btn_call, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(inner), btn_raise, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(inner), btn_check, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(inner), btn_fold, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(inner), btn_ability, FALSE, FALSE, 0);
         g_signal_connect(btn_call, "clicked", G_CALLBACK(on_call), NULL);
         g_signal_connect(btn_raise, "clicked", G_CALLBACK(on_raise), NULL);
         g_signal_connect(btn_check, "clicked", G_CALLBACK(on_check), NULL);
         g_signal_connect(btn_fold, "clicked", G_CALLBACK(on_fold), NULL);
+        g_signal_connect(btn_ability, "clicked", G_CALLBACK(on_ability), NULL);
 
         gtk_box_pack_start(GTK_BOX(vbox), frame, FALSE, FALSE, 0);
     }
@@ -595,7 +657,7 @@ static GtkWidget* build_center_panel(void)
     GtkWidget* my_name = gtk_label_new("YOU");
     gtk_widget_set_name(my_name, "my_name");
     gtk_box_pack_start(GTK_BOX(my_info), my_name, FALSE, FALSE, 0);
-    g_stack_label = gtk_label_new("Stack: 0");
+    g_stack_label = gtk_label_new("Points: 0");
     gtk_widget_set_name(g_stack_label, "my_stack");
     gtk_box_pack_start(GTK_BOX(my_info), g_stack_label, FALSE, FALSE, 0);
 
