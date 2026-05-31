@@ -54,7 +54,6 @@ int main(int argc, char *argv[]) {
     send(sock_fd, login_msg, strlen(login_msg), 0);
 
     // Initialize the Bot's local memory
-
     memset(&state, 0, sizeof(BotState));
     state.my_seat = -1; // Will be set when server confirms login
 
@@ -80,11 +79,8 @@ int main(int argc, char *argv[]) {
 
             //Check if it is the bot's turn 
             if (strncmp(line, "STAT", 4) == 0) {
-                
-                
                 // Check if it is bot turn
-                if (strncmp(line, "STAT", 4) == 0) {
-                    if (state.is_my_turn) {
+                if (state.is_my_turn) {
                     printf("Bot analyzing board...\n");
                  
                     // Ask the bot what to do
@@ -109,8 +105,7 @@ int main(int argc, char *argv[]) {
 
                     // Reset turn flag so we don't spam the server multiple times
                     state.is_my_turn = 0; 
-                 }
-            }
+                }
             }
 
             line = strtok(NULL, "\n");

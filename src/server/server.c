@@ -29,6 +29,7 @@
 #include "socket_server.h"
 #include "server_gui.h"
 #include "server_public.h"
+#include "bot.h"
 
 // global variable for GTK
 static GameState g_game;
@@ -159,6 +160,75 @@ void send_private_hands_to_all(GameState *game)
 }
 
 /*
+ * server_auto_play_bot_turns
+ *
+ * Checks if the current turn is a bot player (socket_fd == -1).
+ * If so, calls the bot AI to decide an action and applies it.
+ * Loops until a human player's turn or hand ends.
+ */
+static void server_auto_play_bot_turns(GameState *game)
+{
+    if (game == NULL || game->current_turn < 0) {
+        return;
+    }
+
+    while (game->current_turn >= 0 && game->current_turn < MAX_PLAYERS) {
+        Player *player = &game->players[game->current_turn];
+
+        /* Check if this seat is a bot (socket_fd == -1) */
+        if (player->status != PLAYER_ACTIVE || player->socket_fd >= 0) {
+            break; /* Human player or empty seat */
+        }
+
+        /* Build a bot state from game state */
+        BotState bot_state;
+        memset(&bot_state, 0, sizeof(BotState));
+        bot_state.my_seat = game->current_turn;
+        bot_state.points = player->points;
+        bot_state.current_bet = player->current_bet;
+        bot_state.table_highest_bet = game->current_bet;
+        bot_state.pot = game->pot;
+        bot_state.is_my_turn = 1;
+
+        /* Copy private hand */
+        for (int i = 0; i < PRIVATE_HAND_SIZE && i < 2; i++) {
+            bot_state.my_cards[i] = player->hand[i];
+        }
+
+        /* Copy community cards */
+        for (int i = 0; i < game->community_count && i < COMMUNITY_CARD_SIZE; i++) {
+            bot_state.community_cards[i] = game->community_cards[i];
+        }
+        bot_state.community_count = game->community_count;
+
+        /* Get bot decision */
+        const char *decision = bot_decide_action(&bot_state);
+        if (decision == NULL) {
+            decision = "CHECK";
+        }
+
+        printf("[BOT] Seat %d decides: %s\n", game->current_turn, decision);
+
+        /* Apply the action */
+        if (strcmp(decision, "RAISE") == 0) {
+            int raise_amount = bot_calculate_raise(&bot_state);
+            if (raise_amount > 0) {
+                poker_apply_action(game, game->current_turn, "RAISE", raise_amount);
+            } else {
+                poker_apply_action(game, game->current_turn, "CHECK", 0);
+            }
+        } else {
+            poker_apply_action(game, game->current_turn, decision, 0);
+        }
+
+        /* Update GUI after bot action */
+        send_public_state_to_all(game);
+        send_private_hands_to_all(game);
+        server_gui_refresh();
+    }
+}
+
+/*
  * handle_client_message
  *
  * Processes one message received from a client.
@@ -222,6 +292,7 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
         send_public_state_to_all(game);
         send_private_hands_to_all(game);
         server_gui_refresh();
+        server_auto_play_bot_turns(game);
         return;
     }
 
@@ -257,6 +328,7 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
         send_public_state_to_all(game);
         send_private_hands_to_all(game);
         server_gui_refresh();
+        server_auto_play_bot_turns(game);
         return;
     }
 
@@ -288,6 +360,7 @@ static void handle_client_message(GameState *game, int client_fd, const char *bu
         send_public_state_to_all(game);
         send_private_hands_to_all(game);
         server_gui_refresh();
+        server_auto_play_bot_turns(game);
         return;
     }
 

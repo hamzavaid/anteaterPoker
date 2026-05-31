@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
  
+#include "bot.h"
 #include "game_state.h"
 #include "server_gui.h"
 #include "server_public.h"
@@ -305,6 +306,29 @@ static void on_deal_river(GtkButton *b, gpointer d)
     send_public_state_to_all(g_game);
     server_gui_refresh();
 }
+
+static void on_add_bot(GtkButton *b, gpointer d)
+{
+    (void)b; (void)d;
+    if (!g_game) return;
+    
+    /* Find an empty seat and add a bot player (socket_fd = -1) */
+    int bot_num = g_game->config.bot_count + 1;
+    char bot_name[64];
+    snprintf(bot_name, sizeof bot_name, "Bot %d", bot_num);
+    
+    int seat = add_player(g_game, -1, bot_name);
+    if (seat < 0) {
+        g_warning("No empty seat available for bot");
+        return;
+    }
+    
+    g_game->config.bot_count++;
+    printf("[SERVER] Bot '%s' added to seat %d\n", bot_name, seat);
+    
+    send_public_state_to_all(g_game);
+    server_gui_refresh();
+}
  
 static void on_quit(GtkButton *b, gpointer d)
 {
@@ -468,6 +492,12 @@ static GtkWidget *build_left_panel(void)
         gtk_widget_set_name(btn_start, "ctrl_btn_green");
         g_signal_connect(btn_start, "clicked", G_CALLBACK(on_start_hand), NULL);
         gtk_box_pack_start(GTK_BOX(inner), btn_start, FALSE, FALSE, 0);
+
+        // Add Bot button — adds a bot seat to the game
+        GtkWidget *btn_bot = gtk_button_new_with_label("ADD BOT");
+        gtk_widget_set_name(btn_bot, "ctrl_btn_blue");
+        g_signal_connect(btn_bot, "clicked", G_CALLBACK(on_add_bot), NULL);
+        gtk_box_pack_start(GTK_BOX(inner), btn_bot, FALSE, FALSE, 0);
  
         // Deal Flop button — calls deal_flop()
         GtkWidget *btn_flop = gtk_button_new_with_label("DEAL FLOP");

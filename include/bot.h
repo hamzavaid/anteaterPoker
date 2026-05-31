@@ -2,6 +2,7 @@
 #define BOT_H
 
 #include "cards.h"
+#include "game_state.h"
 
 /*
  * The bot's local memory of what is happening.
@@ -13,14 +14,13 @@ typedef struct {
     int table_highest_bet;
     int pot;
     char phase[32];
-    
+
     Card my_cards[2];
     Card community_cards[5];
     int community_count;
 
-    int is_my_turn; 
+    int is_my_turn;
 } BotState;
-
 
 /* Parsing: Updates the BotState when the server broadcasts a message */
 void bot_update_state(BotState *state, const char *server_message);
