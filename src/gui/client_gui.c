@@ -617,7 +617,7 @@ static GtkWidget* build_opponent_slot(int idx)
     gtk_widget_set_halign(avatar, GTK_ALIGN_CENTER);
 	fill_avatar_frame(avatar, 38);
     s->avatar_box = avatar;
-
+    
     gtk_box_pack_start(GTK_BOX(vbox), avatar, FALSE, FALSE, 0);
 
     /* name and bet labels */
@@ -907,6 +907,7 @@ static GtkWidget* build_center_panel(void)
     GtkWidget* my_area = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_widget_set_halign(my_area, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(my_area, GTK_ALIGN_END);
+    gtk_widget_set_margin_end(my_area, 120);
     gtk_box_pack_end(GTK_BOX(vbox), my_area, FALSE, FALSE, 2);
 
     GtkWidget* my_hand_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
@@ -916,6 +917,7 @@ static GtkWidget* build_center_panel(void)
         gtk_box_pack_start(GTK_BOX(my_hand_row), g_my_card_img[i], FALSE, FALSE, 0);
     }
 
+    // user info
     GtkWidget* my_info = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
     gtk_widget_set_halign(my_info, GTK_ALIGN_CENTER);
     GtkWidget* my_av = gtk_frame_new(NULL);
@@ -932,7 +934,7 @@ static GtkWidget* build_center_panel(void)
     g_stack_label = gtk_label_new("Points: 0");
     gtk_widget_set_name(g_stack_label, "my_stack");
     gtk_box_pack_start(GTK_BOX(my_info), g_stack_label, FALSE, FALSE, 0);
-
+    
     gtk_box_pack_start(GTK_BOX(my_hand_row), my_info, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(my_area), my_hand_row, FALSE, FALSE, 0);
 
@@ -954,17 +956,17 @@ void launch_poker_window(int server_fd)
     GtkWidget* win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_widget_set_name(win, "poker_window");
     gtk_window_set_title(GTK_WINDOW(win), "Anteater Poker");
-    gtk_window_set_default_size(GTK_WINDOW(win), 1400, 900);
+    gtk_window_set_default_size(GTK_WINDOW(win), 1400, 700);
     gtk_window_set_position(GTK_WINDOW(win), GTK_WIN_POS_CENTER);
     g_signal_connect(win, "destroy", G_CALLBACK(on_quit), NULL);
 
     GtkWidget *overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(win), overlay);
 
-    GdkPixbuf *bg_pb = gdk_pixbuf_new_from_file_at_scale("src/assets/background.jpg", 1400, 900, FALSE, NULL);
+    GdkPixbuf *bg_pb = gdk_pixbuf_new_from_file_at_scale("src/assets/background.jpg", 1400, 700, FALSE, NULL);
     GtkWidget *bg = gtk_image_new_from_pixbuf(bg_pb);
     if (bg_pb) g_object_unref(bg_pb);
-    gtk_widget_set_size_request(bg, 1400, 900);
+    gtk_widget_set_size_request(bg, 1400, 700);
     gtk_container_add(GTK_CONTAINER(overlay), bg);
 
     GtkWidget *root = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
