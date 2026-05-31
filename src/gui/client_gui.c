@@ -7,6 +7,7 @@
 
 #include "poker_gui.h"
 #include "socket_client.h"
+#include "client_state.h"
 
 #define MAX_PLAYERS     6   // 1 local + up to 5 opponents
 #define MAX_COMM_CARDS  5
@@ -21,9 +22,14 @@
 
 static int g_server_fd = -1;
 
+static GtkWidget* g_name_label = NULL;
 static GtkWidget* g_status_label = NULL;
+static GtkWidget* g_winner_label = NULL;
 static GtkWidget* g_pot_label = NULL;
 static GtkWidget* g_stack_label = NULL;
+static GtkWidget* g_my_avatar_box = NULL;
+static int g_my_seat = -1;
+static char g_my_name_text[CLIENT_NAME_LEN] = "";
 static GtkWidget* g_raise_input = NULL;
 static GtkWidget* g_ability_target_input = NULL;
 static GtkWidget* g_ability_param_input = NULL;
@@ -198,6 +204,48 @@ static const char* POKER_CSS =
 "}";
 
 //Update functions, call these from network/game code
+void poker_gui_set_name(const char *name)
+{
+    if (!name) {
+        return;
+    }
+
+    if (!g_name_label) return;
+
+    strncpy(g_my_name_text, name, CLIENT_NAME_LEN - 1);
+    g_my_name_text[CLIENT_NAME_LEN - 1] = '\0';
+
+    char label_text[CLIENT_NAME_LEN + 24];
+    if (g_my_seat >= 0) {
+        snprintf(label_text, sizeof label_text, "%s - Seat %d (YOU)", g_my_name_text, g_my_seat + 1);
+    } else {
+        snprintf(label_text, sizeof label_text, "%s (YOU)", g_my_name_text);
+    }
+    gtk_label_set_text(GTK_LABEL(g_name_label), label_text);
+}
+
+void poker_gui_set_my_seat(int seat)
+{
+    g_my_seat = seat;
+
+    if (!g_name_label) {
+        return;
+    }
+
+    if (!g_my_name_text[0]) {
+        if (g_my_seat >= 0) {
+            char label_text[64];
+            snprintf(label_text, sizeof label_text, "Seat %d (YOU)", g_my_seat + 1);
+            gtk_label_set_text(GTK_LABEL(g_name_label), label_text);
+        } else {
+            gtk_label_set_text(GTK_LABEL(g_name_label), "YOU");
+        }
+        return;
+    }
+
+    poker_gui_set_name(g_my_name_text);
+}
+
 void poker_gui_set_pot(int amount)
 {
     if (!g_pot_label) return;
@@ -220,6 +268,12 @@ void poker_gui_set_status(const char* msg)
     gtk_label_set_text(GTK_LABEL(g_status_label), msg);
 }
 
+void poker_gui_set_winner(const char *winner_msg)
+{
+    if (!g_winner_label) return;
+    gtk_label_set_text(GTK_LABEL(g_winner_label), winner_msg ? winner_msg : "");
+}
+
 void poker_gui_set_ability(const char* ability)
 {
     if (!g_ability_label) return;
@@ -229,7 +283,7 @@ void poker_gui_set_ability(const char* ability)
 void poker_gui_clear_opponents(void)
 {
     for (int i = 0; i < MAX_PLAYERS - 1; i++) {
-        poker_gui_update_slot(i, "", "", 0, 0);
+        poker_gui_update_slot(i, -1, "", "", 0, 0);
     }
 }
 
@@ -261,14 +315,39 @@ void poker_gui_set_my_card(int idx, const char* path)
     }
 }
 
+void poker_gui_set_my_turn_active(int is_active)
+{
+    if (!g_my_avatar_box) return;
+
+    gtk_widget_set_name(
+        g_my_avatar_box,
+        is_active ? "avatar_box_active" : "avatar_box");
+}
+
 //Update opponent slot display (name, bet, active, folded status)
-void poker_gui_update_slot(int slot, const char* name, const char* bet_str, int is_active, int folded)
+void poker_gui_update_slot(int slot, int seat, const char* name, const char* bet_str, int is_active, int folded)
 {
     if (slot < 0 || slot >= MAX_PLAYERS - 1) return;
     OpponentSlot* s = &g_slots[slot];
 
     if (s->name_label)
-        gtk_label_set_text(GTK_LABEL(s->name_label), name ? name : "");
+    {
+        if (name && name[0]) {
+            char label_text[64];
+            if (seat >= 0) {
+                snprintf(label_text, sizeof label_text, "%s - Seat %d", name, seat + 1);
+            } else {
+                snprintf(label_text, sizeof label_text, "%s", name);
+            }
+            gtk_label_set_text(GTK_LABEL(s->name_label), label_text);
+        } else if (seat >= 0) {
+            char label_text[32];
+            snprintf(label_text, sizeof label_text, "Seat %d", seat + 1);
+            gtk_label_set_text(GTK_LABEL(s->name_label), label_text);
+        } else {
+            gtk_label_set_text(GTK_LABEL(s->name_label), "");
+        }
+    }
 
     if (s->bet_label) {
         gtk_label_set_text(GTK_LABEL(s->bet_label), bet_str ? bet_str : "");
@@ -405,7 +484,7 @@ static GtkWidget* build_opponent_slot(int idx)
 
     /* name and bet labels */
     char default_name[32];
-    snprintf(default_name, sizeof default_name, "PLAYER %d", idx + 2);
+    snprintf(default_name, sizeof default_name, "Seat ?");
     GtkWidget* name_lbl = gtk_label_new(default_name);
     gtk_widget_set_name(name_lbl, "slot_name");
     s->name_label = name_lbl;
@@ -441,6 +520,11 @@ static GtkWidget* build_right_panel(void)
         gtk_label_set_line_wrap(GTK_LABEL(g_status_label), TRUE);
         gtk_widget_set_size_request(g_status_label, -1, 34);
         gtk_box_pack_start(GTK_BOX(inner), g_status_label, FALSE, FALSE, 0);
+
+        g_winner_label = gtk_label_new("");
+        gtk_widget_set_name(g_winner_label, "winner_text");
+        gtk_label_set_line_wrap(GTK_LABEL(g_winner_label), TRUE);
+        gtk_box_pack_start(GTK_BOX(inner), g_winner_label, FALSE, FALSE, 0);
 
         gtk_box_pack_start(GTK_BOX(vbox), frame, FALSE, FALSE, 0);
     }
@@ -653,10 +737,11 @@ static GtkWidget* build_center_panel(void)
     gtk_widget_set_name(my_av, "avatar_box");
     gtk_widget_set_size_request(my_av, 38, 38);
     gtk_widget_set_halign(my_av, GTK_ALIGN_CENTER);
+    g_my_avatar_box = my_av;
     gtk_box_pack_start(GTK_BOX(my_info), my_av, FALSE, FALSE, 0);
-    GtkWidget* my_name = gtk_label_new("YOU");
-    gtk_widget_set_name(my_name, "my_name");
-    gtk_box_pack_start(GTK_BOX(my_info), my_name, FALSE, FALSE, 0);
+    g_name_label = gtk_label_new("YOU");
+    gtk_widget_set_name(g_name_label, "my_name");
+    gtk_box_pack_start(GTK_BOX(my_info), g_name_label, FALSE, FALSE, 0);
     g_stack_label = gtk_label_new("Points: 0");
     gtk_widget_set_name(g_stack_label, "my_stack");
     gtk_box_pack_start(GTK_BOX(my_info), g_stack_label, FALSE, FALSE, 0);

@@ -124,7 +124,7 @@ $(CLIENT_BIN): $(CLIENT_OBJ) $(RULES_OBJ) $(BUILD_DIR)/game_state.o | directorie
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Build bot executable.
-$(BOT_BIN): $(BOT_OBJ) | directories
+$(BOT_BIN): $(BOT_OBJ) $(RULES_OBJ) | directories
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Build deck unit test.

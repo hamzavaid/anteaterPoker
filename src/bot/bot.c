@@ -46,6 +46,7 @@ int main(int argc, char *argv[]) {
     printf("Bot successfully connected to %s:%d\n", server_ip, port);
 
     /* Seed random behavior once per run so the bot can sometimes bluff. */
+    BotState state;
     srand((unsigned)(time(NULL) ^ (uintptr_t)&state));
 
     //Send the login message to the server
@@ -53,7 +54,7 @@ int main(int argc, char *argv[]) {
     send(sock_fd, login_msg, strlen(login_msg), 0);
 
     // Initialize the Bot's local memory
-    BotState state;
+
     memset(&state, 0, sizeof(BotState));
     state.my_seat = -1; // Will be set when server confirms login
 

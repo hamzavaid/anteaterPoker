@@ -14,6 +14,7 @@ static GameState *g_game = NULL;
 static GtkWidget *g_phase_label     = NULL;
 static GtkWidget *g_pot_label       = NULL;
 static GtkWidget *g_turn_label      = NULL;
+static GtkWidget *g_winner_label    = NULL;
 static GtkWidget *g_player_count    = NULL;
 static GtkWidget *g_comm_card_img[MAX_COMM_CARDS];
 
@@ -192,12 +193,26 @@ void server_gui_refresh(void)
         if (g_game->current_turn >= 0 &&
             g_game->players[g_game->current_turn].status != PLAYER_EMPTY) {
             snprintf(buf, sizeof buf, "Seat %d — %s",
-                     g_game->current_turn,
+                     g_game->current_turn + 1,
                      g_game->players[g_game->current_turn].name);
         } else {
             snprintf(buf, sizeof buf, "—");
         }
         gtk_label_set_text(GTK_LABEL(g_turn_label), buf);
+    }
+
+    // winner (only during GAME_OVER phase)
+    if (g_winner_label) {
+        char buf[128];
+        if (g_game->phase == PHASE_GAME_OVER && g_game->last_winner_seat >= 0 &&
+            g_game->players[g_game->last_winner_seat].status != PLAYER_EMPTY) {
+            snprintf(buf, sizeof buf, "%s - Seat %d won the hand!",
+                     g_game->players[g_game->last_winner_seat].name,
+                     g_game->last_winner_seat + 1);
+        } else {
+            buf[0] = '\0';
+        }
+        gtk_label_set_text(GTK_LABEL(g_winner_label), buf);
     }
  
     // player count
@@ -318,8 +333,8 @@ static GtkWidget *build_player_table(void)
         int row = i + 1;
  
         char seat_str[8];
-        snprintf(seat_str, sizeof seat_str, "%d", i);
- 
+        snprintf(seat_str, sizeof seat_str, "%d", i + 1);
+        
         r->seat_label    = gtk_label_new(seat_str);
         r->name_label    = gtk_label_new("---");
         r->status_label  = gtk_label_new("---");
@@ -399,7 +414,15 @@ static GtkWidget *build_left_panel(void)
         gtk_label_set_line_wrap(GTK_LABEL(g_turn_label), TRUE);
         gtk_box_pack_start(GTK_BOX(turn_row), g_turn_label, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(inner), turn_row, FALSE, FALSE, 0);
- 
+
+        // winner row
+        GtkWidget *winner_row = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+        g_winner_label = gtk_label_new("");
+        gtk_widget_set_name(g_winner_label, "winner_text");
+        gtk_label_set_line_wrap(GTK_LABEL(g_winner_label), TRUE);
+        gtk_box_pack_start(GTK_BOX(winner_row), g_winner_label, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(inner), winner_row, FALSE, FALSE, 0);
+
         gtk_box_pack_start(GTK_BOX(vbox), frame, FALSE, FALSE, 0);
     }
  
@@ -520,7 +543,7 @@ void launch_server_window(GameState *game)
     GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_widget_set_name(win, "server_window");
     gtk_window_set_title(GTK_WINDOW(win), "Anteater Poker — Server");
-    gtk_window_set_default_size(GTK_WINDOW(win), 1100, 700);
+    gtk_window_set_default_size(GTK_WINDOW(win), 1200, 820);
     gtk_window_set_position(GTK_WINDOW(win), GTK_WIN_POS_CENTER);
     g_signal_connect(win, "destroy", G_CALLBACK(on_quit), NULL);
  
@@ -528,10 +551,10 @@ void launch_server_window(GameState *game)
     gtk_container_add(GTK_CONTAINER(win), overlay);
  
      GdkPixbuf *bg_pb = gdk_pixbuf_new_from_file_at_scale(
-        "src/assets/background.jpg", 1100, 700, FALSE, NULL);
+        "src/assets/background.jpg", 1200, 820, FALSE, NULL);
     GtkWidget *bg = gtk_image_new_from_pixbuf(bg_pb);
     if (bg_pb) g_object_unref(bg_pb);
-    gtk_widget_set_size_request(bg, 1100, 700);
+    gtk_widget_set_size_request(bg, 1200, 820);
     gtk_container_add(GTK_CONTAINER(overlay), bg);
  
     GtkWidget *root_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);

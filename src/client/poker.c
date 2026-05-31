@@ -221,7 +221,7 @@ static void update_player_widgets_from_state(ClientState *client, const char *pl
             {
                 char info[64];
                 snprintf(info, sizeof(info), "Pts %d  Bet %d", points, bet);
-                poker_gui_update_slot(opponent_slot, name, info,
+                poker_gui_update_slot(opponent_slot, seat, name, info,
                                       seat == client->current_turn,
                                       status == PLAYER_FOLDED);
                 opponent_slot++;
@@ -292,6 +292,8 @@ static void parse_stat_message(ClientState *client, const char *message)
     int players = 0;
     int pot = 0;
     int turn = -1;
+    int winner_seat = -1;
+    char winner_name[CLIENT_NAME_LEN] = "";
     int community = 0;
 
     /* Make sure inputs are valid. */
@@ -302,10 +304,10 @@ static void parse_stat_message(ClientState *client, const char *message)
 
     int matched = sscanf(
         message,
-        "STAT:-1:phase=%63[^;];players=%d;pot=%d;turn=%d;community=%d",
-        phase_text, &players, &pot, &turn, &community);
+        "STAT:-1:phase=%63[^;];players=%d;pot=%d;turn=%d;winner=%d;community=%d",
+        phase_text, &players, &pot, &turn, &winner_seat, &community);
 
-    if (matched == 5)
+    if (matched == 6)
     {
         client->phase = phase_from_string(phase_text);
         client->player_count = players;
@@ -361,19 +363,73 @@ static void parse_stat_message(ClientState *client, const char *message)
             memcpy(player_tmp, players_text, len);
             player_tmp[len] = '\0';
             update_player_widgets_from_state(client, player_tmp);
+
+            /* If server included a winner seat, try to find the player's name. */
+            if (winner_seat >= 0) {
+                char copy[512];
+                char *saveptr = NULL;
+                snprintf(copy, sizeof(copy), "%s", player_tmp);
+                char *entry = strtok_r(copy, ",", &saveptr);
+                while (entry != NULL) {
+                    int seat = -1;
+                    char name[MAX_NAME_LEN];
+                    int points = 0, bet = 0, status = 0;
+                    name[0] = '\0';
+                    if (sscanf(entry, "%d|%31[^|]|%d|%d|%d",
+                               &seat, name, &points, &bet, &status) == 5)
+                    {
+                        if (seat == winner_seat) {
+                            strncpy(winner_name, name, CLIENT_NAME_LEN - 1);
+                            winner_name[CLIENT_NAME_LEN - 1] = '\0';
+                            break;
+                        }
+                    }
+                    entry = strtok_r(NULL, ",", &saveptr);
+                }
+            }
         }
 
         // update GUI pot
         poker_gui_set_pot(pot);
 
-        // update GUI status — show whose turn it is
-        if (turn == client->seat)
-            poker_gui_set_status("Your turn!");
+        // Highlight local avatar if this client is active
+        poker_gui_set_my_turn_active(turn >= 0 && turn == client->seat);
+
+        /* update GUI status — handle game-over separately */
+        if (client->phase == PHASE_GAME_OVER)
+        {
+            poker_gui_set_my_turn_active(0);
+            poker_gui_set_status("Hand over");
+            if (winner_seat >= 0) {
+                char winner_msg[128];
+                if (winner_name[0])
+                    snprintf(winner_msg, sizeof winner_msg, "%s - Seat %d won the hand!", winner_name, winner_seat + 1);
+                else
+                    snprintf(winner_msg, sizeof winner_msg, "Seat %d won the hand!", winner_seat + 1);
+                poker_gui_set_winner(winner_msg);
+            } else {
+                poker_gui_set_winner("");
+            }
+        }
+        else if (client->phase == PHASE_LOBBY || turn < 0)
+        {
+            poker_gui_set_my_turn_active(0);
+            poker_gui_set_status("Waiting for hand to begin...");
+            poker_gui_set_winner("");
+        }
+        else if (turn == client->seat)
+        {
+            poker_gui_set_my_turn_active(1);
+            poker_gui_set_status("Your turn");
+            poker_gui_set_winner("");
+        }
         else
         {
+            poker_gui_set_my_turn_active(0);
             char buf[64];
-            snprintf(buf, sizeof buf, "Waiting for seat %d...", turn);
+            snprintf(buf, sizeof buf, "Waiting for seat %d...", turn + 1);
             poker_gui_set_status(buf);
+            poker_gui_set_winner("");
         }
 
         set_client_status(client, "Received public game state.");
@@ -451,7 +507,17 @@ static void parse_hand_message(ClientState *client, const char *message)
         poker_gui_set_ability(ability_label);
 
         set_client_status(client, "Received private hand.");
-        poker_gui_set_status("Cards dealt. Good luck!");
+
+        if (client->phase == PHASE_LOBBY || client->current_turn < 0)
+        {
+            poker_gui_set_my_turn_active(0);
+            poker_gui_set_status("Waiting for hand to begin...");
+        }
+        else if (client->current_turn == client->seat)
+        {
+            poker_gui_set_my_turn_active(1);
+            poker_gui_set_status("Your turn!");
+        }
     }
     else
     {
@@ -493,8 +559,9 @@ static void handle_single_server_message(ClientState *client, const char *messag
         {
             client->seat = seat;
             set_client_status(client, "Logged in and seated.");
+            poker_gui_set_my_seat(seat);
             char buf[64];
-            snprintf(buf, sizeof buf, "Seated at seat %d.", seat);
+            snprintf(buf, sizeof buf, "Seated at seat %d.", seat + 1);
             poker_gui_set_status(buf);
         }
     }
@@ -684,6 +751,10 @@ int main(int argc, char *argv[])
 
     // launch GUI — passes socket fd so button callbacks can send to server
     launch_poker_window(g_client.socket_fd);
+
+    /* Show our player name */
+    poker_gui_set_name(g_client.player_name);
+    poker_gui_set_my_seat(g_client.seat);
 
     gtk_main();
 

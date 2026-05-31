@@ -87,6 +87,7 @@ void init_game_state(GameState *game, const ServerConfig *config, int server_fd)
     game->pot = 0;
     game->current_bet = 0;
     game->community_count = 0;
+    game->last_winner_seat = -1;
     for (int i = 0; i < MAX_PLAYERS; i++) {
         game->acted_this_round[i] = 0;
     }
@@ -217,6 +218,32 @@ void remove_player(GameState *game, int seat)
         if (game->player_count > 0) {
             game->player_count--;
         }
+
+        /* If the table is empty, reset the whole table back to lobby state. */
+        if (game->player_count == 0) {
+            game->phase = PHASE_LOBBY;
+            game->current_turn = -1;
+            game->pot = 0;
+            game->current_bet = 0;
+            game->community_count = 0;
+
+            for (int i = 0; i < MAX_PLAYERS; i++) {
+                game->acted_this_round[i] = 0;
+                game->players[i].current_bet = 0;
+                game->players[i].ability.type = ABILITY_NONE;
+                game->players[i].ability.used = 0;
+                game->players[i].ability.target_seat = -1;
+                game->players[i].ability.param = 0;
+
+                for (int j = 0; j < PRIVATE_HAND_SIZE; j++) {
+                    game->players[i].hand[j] = create_card(RANK_INVALID, SUIT_INVALID);
+                }
+            }
+
+            for (int i = 0; i < COMMUNITY_CARD_SIZE; i++) {
+                game->community_cards[i] = create_card(RANK_INVALID, SUIT_INVALID);
+            }
+        }
     }
 }
 
@@ -245,6 +272,7 @@ void start_new_hand(GameState *game)
     game->pot = 0;
     game->current_bet = 0;
     game->community_count = 0;
+    game->last_winner_seat = -1;
     for (int i = 0; i < MAX_PLAYERS; i++) {
         game->acted_this_round[i] = 0;
     }
@@ -254,10 +282,9 @@ void start_new_hand(GameState *game)
         game->community_cards[i] = create_card(RANK_INVALID, SUIT_INVALID);
     }
 
-    /* Reset active players for the hand. */
+    /* Reset player state for the new hand. Any non-empty seat becomes ACTIVE. */
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (game->players[i].status == PLAYER_CONNECTED ||
-            game->players[i].status == PLAYER_ACTIVE) {
+        if (game->players[i].status != PLAYER_EMPTY) {
             game->players[i].status = PLAYER_ACTIVE;
             game->players[i].current_bet = 0;
             game->players[i].ability.used = 0;
@@ -502,11 +529,12 @@ void build_public_game_state(const GameState *game, char *buffer, int buffer_siz
     snprintf(
         buffer,
         buffer_size,
-        "STAT:-1:phase=%s;players=%d;pot=%d;turn=%d;community=%d;community_cards=%s;player_state=%s\n",
+        "STAT:-1:phase=%s;players=%d;pot=%d;turn=%d;winner=%d;community=%d;community_cards=%s;player_state=%s\n",
         game_phase_to_string(game->phase),
         visible_players,
         game->pot,
         game->current_turn,
+        game->last_winner_seat,
         game->community_count,
         community_cards,
         player_summary

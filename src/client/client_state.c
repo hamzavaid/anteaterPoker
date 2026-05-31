@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "client_state.h"
+#include "poker_gui.h"
 
 /*
  * Initializes a ClientState structure with default values.
