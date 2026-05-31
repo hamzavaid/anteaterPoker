@@ -19,6 +19,8 @@
 #define CARD_H_MD       63
 #define CARD_W_LG       58
 #define CARD_H_LG       83
+#define ACTION_IMG_W    140
+#define ACTION_IMG_H    196
 
 static int g_server_fd = -1;
 
@@ -35,6 +37,10 @@ static GtkWidget* g_ability_target_input = NULL;
 static GtkWidget* g_ability_param_input = NULL;
 static GtkWidget* g_ability_label = NULL;
 
+static GtkWidget* g_action_card_image  = NULL;
+static GtkWidget* g_action_card_desc   = NULL;
+static GtkWidget* g_action_card_frame  = NULL;
+
 static GtkWidget* g_comm_card_img[MAX_COMM_CARDS];
 static GtkWidget* g_my_card_img[2];
 
@@ -45,6 +51,52 @@ typedef struct {
     GtkWidget* avatar_box;
     GtkWidget* card_img[2];
 } OpponentSlot;
+
+typedef struct {
+    const char* name;       // matches ability string sent by server
+    const char* img_path;
+    const char* description;
+} AbilityInfo;
+
+static const AbilityInfo ABILITY_TABLE[] = {
+    {
+        "SNIFF",
+        "src/assets/sniff.png",
+        "Because of the anteater's superior sense of smell, you can sniff out one random private card from a chosen opponent.\n\nSet Target to the opponent's seat number."
+    },
+    {
+        "ANT_TRAIL",
+        "src/assets/anttrail.png",
+        "Following an ant trail can lead to great things! View either the suit or number of the next community card before it is revealed to anyone else.\n\nSet Param to 0 for suit, 1 for rank."
+    },
+    {
+        "POSE",
+        "src/assets/pose.png",
+        "The anteater stands in a protective pose to fend off predators. Cancel another player's special ability card, regardless of whose turn it is.\n\nSet Target to the opponent's seat number."
+    },
+    {
+        "LONG_TONGUE",
+        "src/assets/longtongue.png",
+        "Using the anteater's long tongue, swap one of your private cards with the top card of the deck.\n\nSet Param to 0 for your first card, 1 for your second."
+    },
+    {
+        "WILD_GRAB",
+        "src/assets/wildgrab.png",
+        "Using the anteater's tail, replace one of your private cards with a wildcard that can represent any card for the best possible poker hand.\n\nSet Param to 0 for card 1, 1 for card 2."
+    },
+    { NULL, NULL, NULL }
+};
+
+//searches ability table for matching entry
+static const AbilityInfo* find_ability_info(const char* ability_str)
+{
+    if (!ability_str) return NULL;
+    for (int i = 0; ABILITY_TABLE[i].name != NULL; i++) {
+        if (strstr(ability_str, ABILITY_TABLE[i].name))
+            return &ABILITY_TABLE[i];
+    }
+    return NULL;
+}
 
 static OpponentSlot g_slots[MAX_PLAYERS - 1];
 
@@ -134,6 +186,33 @@ static const char* POKER_CSS =
 "  font-size: 8px;"
 "  font-weight: bold;"
 "  letter-spacing: 2px;"
+"}"
+"#action_card_box {"
+"  background-color: rgba(10,18,28,0.97);"
+"  border: 2px solid #d4b830;"
+"  border-radius: 10px;"
+"  padding: 8px 10px;"
+"}"
+"#action_card_box_empty {"
+"  background-color: rgba(14,22,34,0.96);"
+"  border: 1px solid #1e4a6e;"
+"  border-radius: 10px;"
+"  padding: 8px 10px;"
+"}"
+"#action_card_title {"
+"  color: #d4b830;"
+"  font-size: 8px;"
+"  font-weight: bold;"
+"  letter-spacing: 3px;"
+"}"
+"#action_card_desc {"
+"  color: #aac8e0;"
+"  font-size: 9px;"
+"}"
+"#action_card_none {"
+"  color: #2d4a6a;"
+"  font-size: 9px;"
+"  font-style: italic;"
 "}"
 "#status_text {"
 "  color: #dce3ec;"
@@ -278,6 +357,33 @@ void poker_gui_set_ability(const char* ability)
 {
     if (!g_ability_label) return;
     gtk_label_set_text(GTK_LABEL(g_ability_label), ability ? ability : "Ability: NONE");
+ 
+    if (!g_action_card_image || !g_action_card_desc || !g_action_card_frame) return;
+ 
+    const AbilityInfo* info = find_ability_info(ability);
+ 
+    if (info) {
+        // Load and display the action card image
+        GdkPixbuf* pb = gdk_pixbuf_new_from_file_at_scale(
+            info->img_path, ACTION_IMG_W, ACTION_IMG_H, FALSE, NULL);
+        if (pb) {
+            gtk_image_set_from_pixbuf(GTK_IMAGE(g_action_card_image), pb);
+            g_object_unref(pb);
+        } else {
+            gtk_image_clear(GTK_IMAGE(g_action_card_image));
+        }
+ 
+        // Update description text
+        gtk_label_set_text(GTK_LABEL(g_action_card_desc), info->description);
+        gtk_widget_set_name(g_action_card_desc, "action_card_desc");
+        gtk_widget_set_name(g_action_card_frame, "action_card_box");
+    } else {
+        // No ability — clear the image and show placeholder text
+        gtk_image_clear(GTK_IMAGE(g_action_card_image));
+        gtk_label_set_text(GTK_LABEL(g_action_card_desc), "No action card assigned yet.");
+        gtk_widget_set_name(g_action_card_desc, "action_card_none");
+        gtk_widget_set_name(g_action_card_frame, "action_card_box_empty");
+    }
 }
 
 void poker_gui_clear_opponents(void)
@@ -384,6 +490,17 @@ static GtkWidget* make_card_placeholder_lg(void)
     return img;
 }
 
+static void fill_avatar_frame(GtkWidget* frame, int size)
+{
+    GdkPixbuf* pb = gdk_pixbuf_new_from_file_at_scale(
+        "src/assets/avatar.png", size, size, TRUE, NULL);
+    if (pb) {
+        GtkWidget* img = gtk_image_new_from_pixbuf(pb);
+        g_object_unref(pb);
+        gtk_container_add(GTK_CONTAINER(frame), img);
+    }
+}
+
 /* builds a card image path from value and suit
    value: "ace","2"-"10","jack","queen","king"
    suit:  "spades","hearts","diamonds","clubs" */
@@ -475,9 +592,11 @@ static GtkWidget* build_opponent_slot(int idx)
 
     //avatar frame 
     GtkWidget* avatar = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(avatar), GTK_SHADOW_NONE);
     gtk_widget_set_name(avatar, "avatar_box");
     gtk_widget_set_size_request(avatar, 42, 42);
     gtk_widget_set_halign(avatar, GTK_ALIGN_CENTER);
+	fill_avatar_frame(avatar, 38);
     s->avatar_box = avatar;
 
     gtk_box_pack_start(GTK_BOX(vbox), avatar, FALSE, FALSE, 0);
@@ -498,6 +617,39 @@ static GtkWidget* build_opponent_slot(int idx)
     return vbox;
 }
 
+static GtkWidget* build_action_card_panel(void)
+{
+    GtkWidget* frame = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
+    gtk_widget_set_name(frame, "action_card_box_empty");
+    g_action_card_frame = frame;
+ 
+    GtkWidget* inner = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_container_set_border_width(GTK_CONTAINER(inner), 4);
+    gtk_container_add(GTK_CONTAINER(frame), inner);
+ 
+    GtkWidget* title_lbl = gtk_label_new("YOUR ACTION CARD");
+    gtk_widget_set_name(title_lbl, "action_card_title");
+    gtk_box_pack_start(GTK_BOX(inner), title_lbl, FALSE, FALSE, 0);
+ 
+    // Card image
+    g_action_card_image = gtk_image_new();
+    gtk_widget_set_size_request(g_action_card_image, ACTION_IMG_W, ACTION_IMG_H);
+    gtk_widget_set_halign(g_action_card_image, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(inner), g_action_card_image, FALSE, FALSE, 0);
+ 
+    // Description label
+    g_action_card_desc = gtk_label_new("No action card assigned yet.");
+    gtk_widget_set_name(g_action_card_desc, "action_card_none");
+    gtk_label_set_line_wrap(GTK_LABEL(g_action_card_desc), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(g_action_card_desc), 26);
+    gtk_label_set_justify(GTK_LABEL(g_action_card_desc), GTK_JUSTIFY_CENTER);
+    gtk_widget_set_halign(g_action_card_desc, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(inner), g_action_card_desc, FALSE, FALSE, 0);
+ 
+    return frame;
+}
+
 static GtkWidget* build_right_panel(void)
 {
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
@@ -506,6 +658,7 @@ static GtkWidget* build_right_panel(void)
 	//status box
     {
         GtkWidget* frame = gtk_frame_new(NULL);
+		gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
         gtk_widget_set_name(frame, "side_box");
         GtkWidget* inner = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
         gtk_container_set_border_width(GTK_CONTAINER(inner), 4);
@@ -529,9 +682,12 @@ static GtkWidget* build_right_panel(void)
         gtk_box_pack_start(GTK_BOX(vbox), frame, FALSE, FALSE, 0);
     }
 
+	gtk_box_pack_start(GTK_BOX(vbox), build_action_card_panel(), FALSE, FALSE, 0);
+
     //action box
     {
         GtkWidget* frame = gtk_frame_new(NULL);
+		gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
         gtk_widget_set_name(frame, "side_box");
         GtkWidget* inner = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
         gtk_container_set_border_width(GTK_CONTAINER(inner), 4);
@@ -612,6 +768,7 @@ static GtkWidget* build_right_panel(void)
 	//control box (quit button)
     {
         GtkWidget* frame = gtk_frame_new(NULL);
+		gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
         gtk_widget_set_name(frame, "side_box");
         GtkWidget* inner = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
         gtk_container_set_border_width(GTK_CONTAINER(inner), 4);
@@ -641,6 +798,7 @@ static GtkWidget* build_left_panel(void)
     gtk_box_pack_start(GTK_BOX(vbox), spacer, TRUE, TRUE, 0);
 
     GtkWidget* frame = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
     gtk_widget_set_name(frame, "rankings_frame");
     GdkPixbuf *rpb = gdk_pixbuf_new_from_file_at_scale("src/assets/rankings.jpg", 268, -1, TRUE, NULL);
     GtkWidget* img = gtk_image_new_from_pixbuf(rpb);
@@ -734,10 +892,11 @@ static GtkWidget* build_center_panel(void)
     GtkWidget* my_info = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
     gtk_widget_set_halign(my_info, GTK_ALIGN_CENTER);
     GtkWidget* my_av = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(my_av), GTK_SHADOW_NONE);
     gtk_widget_set_name(my_av, "avatar_box");
     gtk_widget_set_size_request(my_av, 38, 38);
     gtk_widget_set_halign(my_av, GTK_ALIGN_CENTER);
-    g_my_avatar_box = my_av;
+	fill_avatar_frame(my_av, 34);
     gtk_box_pack_start(GTK_BOX(my_info), my_av, FALSE, FALSE, 0);
     g_name_label = gtk_label_new("YOU");
     gtk_widget_set_name(g_name_label, "my_name");
