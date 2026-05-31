@@ -553,7 +553,12 @@ static void on_ability(GtkButton* b, gpointer d)
     if (g_ability_param_input)
         param = gtk_entry_get_text(GTK_ENTRY(g_ability_param_input));
 
-    snprintf(msg, sizeof msg, "ABIL:-1:%s:%s\n", target, param);
+    int target_seat = atoi(target);
+    /* Target is visually 1-based, subtract 1 for internal 0-based seat.
+       If it's already 0 it becomes -1 (which server ignores safely). */
+    target_seat = target_seat > 0 ? target_seat - 1 : -1;
+
+    snprintf(msg, sizeof msg, "ABIL:-1:%d:%s\n", target_seat, param);
     poker_gui_set_status("Ability used.");
     send_to_server(g_server_fd, msg);
 }
@@ -653,7 +658,7 @@ static GtkWidget* build_action_card_panel(void)
 static GtkWidget* build_right_panel(void)
 {
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_set_size_request(vbox, 210, -1);
+    gtk_widget_set_size_request(vbox, 240, -1);
 
 	//status box
     {
@@ -682,7 +687,7 @@ static GtkWidget* build_right_panel(void)
         gtk_box_pack_start(GTK_BOX(vbox), frame, FALSE, FALSE, 0);
     }
 
-	gtk_box_pack_start(GTK_BOX(vbox), build_action_card_panel(), FALSE, FALSE, 0);
+    /* action card is shown in the left panel now */
 
     //action box
     {
@@ -794,20 +799,23 @@ static GtkWidget* build_left_panel(void)
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(vbox, 280, -1);
 
+    // Add action card panel to the left panel
+    gtk_box_pack_start(GTK_BOX(vbox), build_action_card_panel(), FALSE, FALSE, 0);
+
     GtkWidget* spacer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_box_pack_start(GTK_BOX(vbox), spacer, TRUE, TRUE, 0);
 
     GtkWidget* frame = gtk_frame_new(NULL);
-	gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
+    gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
     gtk_widget_set_name(frame, "rankings_frame");
     GdkPixbuf *rpb = gdk_pixbuf_new_from_file_at_scale("src/assets/rankings.jpg", 268, -1, TRUE, NULL);
     GtkWidget* img = gtk_image_new_from_pixbuf(rpb);
     if (rpb) g_object_unref(rpb);
     gtk_widget_set_size_request(img, 268, -1);
- 
+
     gtk_container_add(GTK_CONTAINER(frame), img);
     gtk_box_pack_start(GTK_BOX(vbox), frame, FALSE, FALSE, 0);
- 
+
     return vbox;
 }
 
@@ -875,7 +883,6 @@ static GtkWidget* build_center_panel(void)
 
     GtkWidget* sep2 = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_widget_set_name(sep2, "h_sep");
-    gtk_box_pack_start(GTK_BOX(vbox), sep2, FALSE, FALSE, 2);
 
     GtkWidget* my_area = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_widget_set_halign(my_area, GTK_ALIGN_CENTER);
@@ -897,6 +904,7 @@ static GtkWidget* build_center_panel(void)
     gtk_widget_set_size_request(my_av, 38, 38);
     gtk_widget_set_halign(my_av, GTK_ALIGN_CENTER);
 	fill_avatar_frame(my_av, 34);
+    g_my_avatar_box = my_av;
     gtk_box_pack_start(GTK_BOX(my_info), my_av, FALSE, FALSE, 0);
     g_name_label = gtk_label_new("YOU");
     gtk_widget_set_name(g_name_label, "my_name");
@@ -926,17 +934,17 @@ void launch_poker_window(int server_fd)
     GtkWidget* win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_widget_set_name(win, "poker_window");
     gtk_window_set_title(GTK_WINDOW(win), "Anteater Poker");
-    gtk_window_set_default_size(GTK_WINDOW(win), 1100, 680);
+    gtk_window_set_default_size(GTK_WINDOW(win), 1400, 900);
     gtk_window_set_position(GTK_WINDOW(win), GTK_WIN_POS_CENTER);
     g_signal_connect(win, "destroy", G_CALLBACK(on_quit), NULL);
 
     GtkWidget *overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(win), overlay);
 
-    GdkPixbuf *bg_pb = gdk_pixbuf_new_from_file_at_scale("src/assets/background.jpg", 1100, 680, FALSE, NULL);
+    GdkPixbuf *bg_pb = gdk_pixbuf_new_from_file_at_scale("src/assets/background.jpg", 1400, 900, FALSE, NULL);
     GtkWidget *bg = gtk_image_new_from_pixbuf(bg_pb);
     if (bg_pb) g_object_unref(bg_pb);
-    gtk_widget_set_size_request(bg, 1100, 680);
+    gtk_widget_set_size_request(bg, 1400, 900);
     gtk_container_add(GTK_CONTAINER(overlay), bg);
 
     GtkWidget *root = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
