@@ -513,6 +513,7 @@ static GtkWidget* build_opponent_slot(int idx)
 
     //avatar frame 
     GtkWidget* avatar = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(avatar), GTK_SHADOW_NONE);
     gtk_widget_set_name(avatar, "avatar_box");
     gtk_widget_set_size_request(avatar, 42, 42);
     gtk_widget_set_halign(avatar, GTK_ALIGN_CENTER);
@@ -540,6 +541,7 @@ static GtkWidget* build_opponent_slot(int idx)
 static GtkWidget* build_action_card_panel(void)
 {
     GtkWidget* frame = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
     gtk_widget_set_name(frame, "action_card_box_empty");
     g_action_card_frame = frame;
  
@@ -577,6 +579,7 @@ static GtkWidget* build_right_panel(void)
 	//status box
     {
         GtkWidget* frame = gtk_frame_new(NULL);
+		gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
         gtk_widget_set_name(frame, "side_box");
         GtkWidget* inner = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
         gtk_container_set_border_width(GTK_CONTAINER(inner), 4);
@@ -600,6 +603,7 @@ static GtkWidget* build_right_panel(void)
     //action box
     {
         GtkWidget* frame = gtk_frame_new(NULL);
+		gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
         gtk_widget_set_name(frame, "side_box");
         GtkWidget* inner = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
         gtk_container_set_border_width(GTK_CONTAINER(inner), 4);
@@ -680,6 +684,7 @@ static GtkWidget* build_right_panel(void)
 	//control box (quit button)
     {
         GtkWidget* frame = gtk_frame_new(NULL);
+		gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
         gtk_widget_set_name(frame, "side_box");
         GtkWidget* inner = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
         gtk_container_set_border_width(GTK_CONTAINER(inner), 4);
@@ -709,6 +714,7 @@ static GtkWidget* build_left_panel(void)
     gtk_box_pack_start(GTK_BOX(vbox), spacer, TRUE, TRUE, 0);
 
     GtkWidget* frame = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
     gtk_widget_set_name(frame, "rankings_frame");
     GdkPixbuf *rpb = gdk_pixbuf_new_from_file_at_scale("src/assets/rankings.jpg", 268, -1, TRUE, NULL);
     GtkWidget* img = gtk_image_new_from_pixbuf(rpb);
@@ -802,6 +808,7 @@ static GtkWidget* build_center_panel(void)
     GtkWidget* my_info = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
     gtk_widget_set_halign(my_info, GTK_ALIGN_CENTER);
     GtkWidget* my_av = gtk_frame_new(NULL);
+	gtk_frame_set_shadow_type(GTK_FRAME(my_av), GTK_SHADOW_NONE);
     gtk_widget_set_name(my_av, "avatar_box");
     gtk_widget_set_size_request(my_av, 38, 38);
     gtk_widget_set_halign(my_av, GTK_ALIGN_CENTER);
