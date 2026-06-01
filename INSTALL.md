@@ -13,8 +13,8 @@
 Unpack the user package:
 
 ```sh
-gtar xvzf Poker_Alpha.tar.gz
-cd Poker_Alpha
+gtar xvzf Poker_Beta.tar.gz
+cd Poker_Beta
 ```
 
 Run the server:
@@ -36,8 +36,8 @@ Replace server_name_or_ip with the actual host name or IP address of the server,
 Unpack and build from source:
 
 ```sh
-gtar xvzf Poker_Alpha_src.tar.gz
-cd Poker_Alpha_src
+gtar xvzf Poker_Beta_src.tar.gz
+cd Poker_Beta_src
 make
 ```
 

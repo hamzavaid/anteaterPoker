@@ -1,6 +1,6 @@
 # Anteater Poker
 
-**Version:** 0.1 Alpha  
+**Version:** 0.2 Beta  
 **Date:** May 2026  
 **Course:** EECS 22L  
 **Institution:** University of California, Irvine  
@@ -20,9 +20,9 @@ Anteater Poker is an online multiplayer poker game based on Texas Hold'em with a
 
 The program uses a central server to manage the poker table, game state, connected players, bot players, card dealing, legal actions, point tracking, and game updates. Players connect to the server through a graphical client application and play against other users or bot players.
 
-## Alpha Release Notes
+## Beta Release Notes
 
-This is the alpha version of Anteater Poker. Some features may still be incomplete or under development. The purpose of this release is to provide an early preview of the program, including the basic server/client structure, poker game logic, graphical interface, and project documentation.
+This is the beta version of Anteater Poker. Many of the final game's features have been implemented in some capacity. The purpose of this release is to provide a more developed preview of the program than the alpha, including the basic server/client structure, poker game logic, graphical interface, and project documentation.
 
 ## Anteater Special Ability Cards
 
